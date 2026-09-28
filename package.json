@@ -1,0 +1,36 @@
+{
+  "name": "obsidian-voice-aloud",
+  "version": "0.1.0",
+  "description": "Voice Aloud — 逐句朗读 Obsidian 笔记：点击句子从该句开始连读，多 TTS 供应商账号体系，预取 + 哈希缓存无缝衔接，桌面与移动端可用",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "obsidian",
+    "tts",
+    "reading",
+    "plugin"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.24.2",
+    "eslint": "^9.17.0",
+    "obsidian": "latest",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.0",
+    "vitest": "^2.1.8"
+  }
+}
