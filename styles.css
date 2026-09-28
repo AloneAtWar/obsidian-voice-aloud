@@ -1,0 +1,196 @@
+/* ===== 正文句子标注（阅读视图） ===== */
+
+.va-sent {
+  border-radius: 3px;
+  padding: 1px 2px;
+  margin: 0;
+  transition: background 0.15s;
+}
+
+/* 点读模式开启时（body.va-point-read）才提供可点击样式，平时完全无感 */
+.va-point-read .va-sent {
+  cursor: pointer;
+}
+
+.va-point-read .va-sent:hover {
+  background: var(--background-modifier-hover);
+}
+
+.va-sent.va-active {
+  background: var(--background-modifier-active-hover);
+  box-shadow: inset 0 -2px 0 var(--text-accent);
+}
+
+/* ===== Player 面板 ===== */
+
+.va-view {
+  padding: 0;
+}
+
+.va-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.va-header {
+  padding: 8px 10px 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.va-title {
+  font-size: var(--font-smaller);
+  font-weight: 600;
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.va-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.va-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 2px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--font-smallest);
+  font-variant-numeric: tabular-nums;
+}
+
+.va-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.va-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.va-btn-on {
+  color: var(--text-accent);
+  background: var(--background-modifier-active-hover);
+}
+
+.va-btn-active {
+  color: var(--text-accent);
+}
+
+.va-progress {
+  font-size: var(--font-smallest);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.va-toolbar-spacer {
+  flex: 1;
+}
+
+.va-select {
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 2px 4px;
+}
+
+/* 当前句预览：点击定位正文 */
+.va-preview {
+  margin: 10px 10px 6px;
+  padding: 8px 10px;
+  font-size: var(--font-small);
+  line-height: 1.6;
+  color: var(--text-faint);
+  background: var(--background-secondary);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.va-preview:hover {
+  color: var(--text-muted);
+}
+
+.va-preview-live {
+  color: var(--text-normal);
+  border-left: 3px solid var(--text-accent);
+}
+
+.va-status {
+  margin-top: auto;
+  padding: 5px 10px;
+  font-size: var(--font-smallest);
+  color: var(--text-faint);
+  border-top: 1px solid var(--background-modifier-border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== 设置页 ===== */
+
+.va-setting-hint {
+  padding: 4px 0 8px;
+  font-size: var(--font-smaller);
+  color: var(--text-faint);
+}
+
+.va-cache-list {
+  margin-bottom: 8px;
+}
+
+.va-cache-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.va-cache-note-path {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-smaller);
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.va-cache-note-meta {
+  font-size: var(--font-smallest);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.va-cache-clear-btn {
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-s);
+}
+
+.va-cache-clear-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}

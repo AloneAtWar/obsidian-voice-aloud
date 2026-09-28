@@ -6,3 +6,6 @@ main.js
 Thumbs.db
 coverage/
 diag.txt
+
+# ZCode session artifacts
+.zcode/
