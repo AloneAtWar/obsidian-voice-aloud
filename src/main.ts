@@ -11,7 +11,7 @@ import { PointReadMode } from './core/point-read';
 import { buildUnits, UnitIndex } from './core/sentences';
 import { t } from './i18n';
 import { PlayerPanelView, VIEW_TYPE_VOICE_ALOUD, type PlayerPanelHost } from './ui/player-view';
-import { VoiceAloudSettingTab, type SettingsTabHost } from './ui/settings-tab';
+import { VoiceAloudSettingTab } from './ui/settings-tab';
 
 export default class VoiceAloudPlugin extends Plugin {
   override settings: VoiceAloudSettings = DEFAULT_SETTINGS;
@@ -86,7 +86,7 @@ export default class VoiceAloudPlugin extends Plugin {
       callback: () => void this.togglePointRead(),
     });
 
-    this.addSettingTab(new VoiceAloudSettingTab(this.app, this.settingTabHost()));
+    this.addSettingTab(new VoiceAloudSettingTab(this.app, this));
 
     // 正文（阅读视图）句子标注 + 播放高亮
     registerAnnotationPostProcessor(this, () => this.unitIndex);
@@ -147,16 +147,6 @@ export default class VoiceAloudPlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       void this.reloadActive(this.app.workspace.getActiveFile());
     });
-  }
-
-  /** 面板宿主接口（避免 UI 与 main 循环引用）。 */
-  private settingTabHost(): SettingsTabHost {
-    return {
-      settings: this.settings,
-      saveSettings: () => this.saveSettings(),
-      getStorage: () => this.storage,
-      refreshPlayerViews: () => this.refreshPlayerViews(),
-    };
   }
 
   async togglePointRead(): Promise<void> {

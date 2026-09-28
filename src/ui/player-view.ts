@@ -16,7 +16,9 @@ const RATES = [0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 
 /** 纯控制面板：控制条 + 进度 + 当前句预览（点击定位正文）+ 点读模式开关 + 预生成。 */
 export class PlayerPanelView extends ItemView {
-  private titleEl!: HTMLElement;
+  // 不能叫 titleEl：ES2022 类字段会以 define 语义遮蔽 View 基类同名属性（标题栏元素），
+  // 导致 View.load() 里 this.titleEl.setText 读到 undefined
+  private panelTitleEl!: HTMLElement;
   private statusEl!: HTMLElement;
   private progressEl!: HTMLElement;
   private previewEl!: HTMLElement;
@@ -72,8 +74,8 @@ export class PlayerPanelView extends ItemView {
     const root = this.contentEl.createDiv('va-root');
 
     const header = root.createDiv('va-header');
-    this.titleEl = header.createDiv('va-title');
-    this.titleEl.setText(t('player.display-name'));
+    this.panelTitleEl = header.createDiv('va-title');
+    this.panelTitleEl.setText(t('player.display-name'));
 
     const toolbar = root.createDiv('va-toolbar');
 
@@ -155,7 +157,7 @@ export class PlayerPanelView extends ItemView {
   }
 
   setNoteTitle(title: string): void {
-    this.titleEl.setText(title || t('player.display-name'));
+    this.panelTitleEl.setText(title || t('player.display-name'));
   }
 
   refresh(): void {

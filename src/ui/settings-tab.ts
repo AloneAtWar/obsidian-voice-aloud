@@ -8,7 +8,7 @@ import { t } from '../i18n';
 export interface SettingsTabHost {
   settings: import('../core/accounts').VoiceAloudSettings;
   saveSettings(): Promise<void>;
-  getStorage(): import('../core/cache/storage').AudioStorage;
+  storage: import('../core/cache/storage').AudioStorage;
   refreshPlayerViews(): void;
 }
 
@@ -19,11 +19,12 @@ function formatBytes(bytes: number): string {
 }
 
 export class VoiceAloudSettingTab extends PluginSettingTab {
-  constructor(
-    app: App,
-    private plugin: SettingsTabHost,
-  ) {
-    super(app, plugin as unknown as ConstructorParameters<typeof PluginSettingTab>[1]);
+  private host: SettingsTabHost;
+
+  constructor(app: App, plugin: import('obsidian').Plugin & SettingsTabHost) {
+    // PluginSettingTab 构造函数会读 plugin.manifest.name/id，必须传真实插件实例
+    super(app, plugin);
+    this.host = plugin;
   }
 
   override display(): void {
@@ -41,15 +42,15 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
 
     new Setting(root).addDropdown((d) => {
       d.addOption('', t('settings.voice-system'));
-      for (const acc of this.plugin.settings.accounts) {
+      for (const acc of this.host.settings.accounts) {
         const label = getProvider(acc.providerId)?.name ?? acc.providerId;
         d.addOption(acc.id, `${acc.name}（${label}）`);
       }
-      d.setValue(this.plugin.settings.activeAccountId ?? '');
+      d.setValue(this.host.settings.activeAccountId ?? '');
       d.onChange(async (v) => {
-        this.plugin.settings.activeAccountId = v || null;
-        await this.plugin.saveSettings();
-        this.plugin.refreshPlayerViews();
+        this.host.settings.activeAccountId = v || null;
+        await this.host.saveSettings();
+        this.host.refreshPlayerViews();
       });
     });
 
@@ -60,10 +61,10 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
         for (const r of [0.75, 1, 1.25, 1.5, 2, 2.5, 3]) {
           d.addOption(String(r), `${r}x`);
         }
-        d.setValue(String(this.plugin.settings.rate));
+        d.setValue(String(this.host.settings.rate));
         d.onChange(async (v) => {
-          this.plugin.settings.rate = parseFloat(v);
-          await this.plugin.saveSettings();
+          this.host.settings.rate = parseFloat(v);
+          await this.host.saveSettings();
         });
       });
 
@@ -71,12 +72,12 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
       .setName(t('settings.skip-back'))
       .setDesc(t('settings.skip-back-desc'))
       .addText((txt) =>
-        txt.setValue(String(this.plugin.settings.skipBackSeconds)).onChange(async (v) => {
+        txt.setValue(String(this.host.settings.skipBackSeconds)).onChange(async (v) => {
           const n = Math.min(60, Math.max(1, parseInt(v, 10) || 15));
           if (String(n) !== v) txt.setValue(String(n));
-          this.plugin.settings.skipBackSeconds = n;
-          await this.plugin.saveSettings();
-          this.plugin.refreshPlayerViews();
+          this.host.settings.skipBackSeconds = n;
+          await this.host.saveSettings();
+          this.host.refreshPlayerViews();
         }),
       );
   }
@@ -84,21 +85,21 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
   private renderAccountsSection(root: HTMLElement): void {
     new Setting(root).setName(t('settings.accounts')).setDesc(t('settings.accounts-desc'));
 
-    if (!this.plugin.settings.accounts.length) {
+    if (!this.host.settings.accounts.length) {
       root.createDiv({ text: t('settings.no-accounts'), cls: 'va-setting-hint' });
     }
-    for (const acc of this.plugin.settings.accounts) {
+    for (const acc of this.host.settings.accounts) {
       const provider = getProvider(acc.providerId);
-      const isActive = this.plugin.settings.activeAccountId === acc.id;
+      const isActive = this.host.settings.activeAccountId === acc.id;
       new Setting(root)
         .setName(`${isActive ? '● ' : ''}${acc.name}`)
         .setDesc(provider?.name ?? acc.providerId)
         .addButton((b: ButtonComponent) =>
           b.setButtonText(t('settings.edit')).onClick(() => {
             new AccountModal(this.app, acc, async (saved) => {
-              const idx = this.plugin.settings.accounts.findIndex((a) => a.id === saved.id);
-              if (idx >= 0) this.plugin.settings.accounts[idx] = saved;
-              await this.plugin.saveSettings();
+              const idx = this.host.settings.accounts.findIndex((a) => a.id === saved.id);
+              if (idx >= 0) this.host.settings.accounts[idx] = saved;
+              await this.host.saveSettings();
               this.display();
             }).open();
           }),
@@ -106,14 +107,14 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
         .addButton((b: ButtonComponent) =>
           b.setButtonText(t('settings.delete')).onClick(async () => {
             if (!window.confirm(`${t('settings.delete')}「${acc.name}」？`)) return;
-            this.plugin.settings.accounts = this.plugin.settings.accounts.filter(
+            this.host.settings.accounts = this.host.settings.accounts.filter(
               (a) => a.id !== acc.id,
             );
-            if (this.plugin.settings.activeAccountId === acc.id) {
-              this.plugin.settings.activeAccountId = null;
+            if (this.host.settings.activeAccountId === acc.id) {
+              this.host.settings.activeAccountId = null;
             }
-            await this.plugin.saveSettings();
-            this.plugin.refreshPlayerViews();
+            await this.host.saveSettings();
+            this.host.refreshPlayerViews();
             this.display();
           }),
         );
@@ -125,8 +126,8 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
         .setButtonText(t('settings.add-account'))
         .onClick(() => {
           new AccountModal(this.app, null, async (saved) => {
-            this.plugin.settings.accounts.push(saved);
-            await this.plugin.saveSettings();
+            this.host.settings.accounts.push(saved);
+            await this.host.saveSettings();
             this.display();
           }).open();
         }),
@@ -146,7 +147,7 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
     listEl: HTMLElement,
     container: HTMLElement,
   ): Promise<void> {
-    const storage = this.plugin.getStorage();
+    const storage = this.host.storage;
     const stats: CacheStats = await storage.stats();
     statsEl.setText(
       t('settings.cache-stats', { entries: stats.entries, size: formatBytes(stats.bytes) }),
