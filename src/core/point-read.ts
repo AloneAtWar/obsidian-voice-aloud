@@ -42,8 +42,16 @@ export class PointReadMode {
 
   private async enter(): Promise<void> {
     const workspace = this.plugin.app.workspace;
-    const view = workspace.getActiveViewOfType(MarkdownView);
-    // 没有打开的笔记就没有可点读的正文，静默不进入
+    // 活动视图不是笔记（如停在面板/设置页）时，回退到最近打开的 markdown 叶子
+    let view = workspace.getActiveViewOfType(MarkdownView);
+    if (!view) {
+      const leaf = workspace.getLeavesOfType('markdown').pop() ?? null;
+      view = (leaf?.view as MarkdownView | undefined) ?? null;
+      if (view && leaf) {
+        workspace.setActiveLeaf(leaf, { focus: true });
+      }
+    }
+    // 整个工作区都没有打开的笔记，静默不进入
     if (!view) return;
     const leaf: WorkspaceLeaf | null = view.leaf ?? null;
     if (!leaf) return;

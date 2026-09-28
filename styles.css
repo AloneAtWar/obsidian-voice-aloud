@@ -21,26 +21,25 @@
   box-shadow: inset 0 -2px 0 var(--text-accent);
 }
 
-/* ===== Player 面板 ===== */
+/* ===== Player 面板（视觉参考 obsidian-voice） ===== */
 
 .va-view {
   padding: 0;
 }
 
-.va-root {
+.va-player {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+  gap: 14px;
+  padding: 16px 14px;
 }
 
-.va-header {
-  padding: 8px 10px 4px;
-  border-bottom: 1px solid var(--background-modifier-border);
+.va-player-header {
+  text-align: center;
 }
 
-.va-title {
-  font-size: var(--font-smaller);
+.va-player-title {
+  font-size: 1.05em;
   font-weight: 600;
   color: var(--text-normal);
   overflow: hidden;
@@ -48,102 +47,309 @@
   white-space: nowrap;
 }
 
-.va-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-
-.va-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 26px;
-  height: 26px;
-  padding: 0 2px;
-  border-radius: var(--radius-s);
-  cursor: pointer;
+.va-player-subtitle {
+  font-size: 0.8em;
   color: var(--text-muted);
-  font-size: var(--font-smallest);
-  font-variant-numeric: tabular-nums;
-}
-
-.va-btn:hover {
-  background: var(--background-modifier-hover);
-  color: var(--text-normal);
-}
-
-.va-btn svg {
-  width: 15px;
-  height: 15px;
-}
-
-.va-btn-on {
-  color: var(--text-accent);
-  background: var(--background-modifier-active-hover);
-}
-
-.va-btn-active {
-  color: var(--text-accent);
-}
-
-.va-progress {
-  font-size: var(--font-smallest);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.va-toolbar-spacer {
-  flex: 1;
-}
-
-.va-select {
-  font-size: var(--font-smallest);
-  color: var(--text-muted);
+/* 当前句展示（点击定位正文） */
+.va-player-now {
+  padding: 10px 12px;
+  border-radius: var(--radius-m);
   background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-s);
-  padding: 2px 4px;
+  border-left: 3px solid var(--interactive-accent);
+  cursor: pointer;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-/* 当前句预览：点击定位正文 */
-.va-preview {
-  margin: 10px 10px 6px;
-  padding: 8px 10px;
+.va-player-now:hover {
+  background: var(--background-modifier-hover);
+}
+
+.va-player-now-label {
+  font-size: var(--font-smallest);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.va-player-now-text {
   font-size: var(--font-small);
   line-height: 1.6;
   color: var(--text-faint);
-  background: var(--background-secondary);
-  border-radius: var(--radius-s);
-  cursor: pointer;
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.va-preview:hover {
+.va-player-now-text.is-live {
+  color: var(--text-normal);
+}
+
+/* 句内进度条 */
+.va-player-seek {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.va-player-scrubber {
+  flex: 1;
+  min-width: 0;
+}
+
+.va-player-scrubber:disabled {
+  opacity: 0.35;
+}
+
+.va-player-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 36px;
+  text-align: center;
+}
+
+/* 传输控制 */
+.va-player-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.va-player-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-normal);
+  border-radius: 50%;
+  /* 重置原生 button 样式 */
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  box-shadow: none;
+  appearance: none;
+  transition:
+    transform 0.1s ease,
+    background-color 0.15s ease;
+}
+
+.va-player-btn:hover {
+  transform: scale(1.08);
+}
+
+.va-player-btn:active {
+  transform: scale(0.95);
+}
+
+.va-player-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+.va-player-skip {
+  position: relative;
+  width: 44px;
+  height: 44px;
   color: var(--text-muted);
 }
 
-.va-preview-live {
+.va-player-skip:hover {
   color: var(--text-normal);
-  border-left: 3px solid var(--text-accent);
 }
 
-.va-status {
-  margin-top: auto;
-  padding: 5px 10px;
+.va-player-skip svg {
+  width: 20px;
+  height: 20px;
+}
+
+.va-player-skip-label {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.va-player-track {
+  width: 36px;
+  height: 36px;
+  color: var(--text-muted);
+}
+
+.va-player-track:hover {
+  color: var(--text-normal);
+}
+
+.va-player-play {
+  width: 64px;
+  height: 64px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.va-player-play:hover {
+  background: var(--interactive-accent-hover);
+}
+
+.va-player-play svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* 次级控制排 */
+.va-player-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.va-player-toggle,
+.va-player-pregen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  color: var(--text-muted);
+  /* 重置原生 button 样式 */
+  background: none;
+  border: none;
+  font: inherit;
+  box-shadow: none;
+  appearance: none;
+  font-size: var(--font-smallest);
+  font-variant-numeric: tabular-nums;
+}
+
+.va-player-toggle:hover,
+.va-player-pregen:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.va-player-toggle.is-active {
+  color: var(--interactive-accent);
+}
+
+.va-player-pregen.is-active {
+  color: var(--interactive-accent);
+}
+
+.va-player-pregen svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 语速组 */
+.va-player-speed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.va-player-speed-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  color: var(--text-muted);
+  /* 重置原生 button 样式 */
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  box-shadow: none;
+  appearance: none;
+}
+
+.va-player-speed-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.va-player-speed-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.va-player-speed-value {
+  min-width: 40px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-normal);
+}
+
+/* 状态行（闲置时隐藏） */
+.va-player-status {
+  margin-top: 4px;
   font-size: var(--font-smallest);
   color: var(--text-faint);
-  border-top: 1px solid var(--background-modifier-border);
+  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding: 6px 0;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.va-player-status.is-hidden {
+  display: none;
+}
+
+/* 合成中的不确定进度条 */
+.va-player-loading {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.va-player-loading.is-active {
+  opacity: 1;
+}
+
+.va-player-loading-fill {
+  height: 100%;
+  width: 30%;
+  border-radius: 1px;
+  background: var(--interactive-accent);
+  animation: va-loading-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes va-loading-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(433%);
+  }
 }
 
 /* ===== 设置页 ===== */

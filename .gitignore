@@ -9,3 +9,4 @@ diag.txt
 
 # ZCode session artifacts
 .zcode/
+scripts/*.png

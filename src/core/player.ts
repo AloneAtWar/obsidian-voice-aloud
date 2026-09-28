@@ -225,6 +225,38 @@ export class Player {
     this.playFromIndex(target.idx);
   }
 
+  /** 快进 N 秒：当前句内 seek；越界则跳到下一句开头（近似）。 */
+  seekForward(): void {
+    if (this.curIdx < 0) return;
+    if (this.deps.getVoice().provider.capabilities.direct) {
+      this.next();
+      return;
+    }
+    const a = this.audio;
+    if (!a) return;
+    const fwd = this.deps.getSkipBackSeconds();
+    if (isFinite(a.duration) && a.currentTime + fwd >= a.duration - 0.05) {
+      this.next();
+      return;
+    }
+    a.currentTime = Math.min(a.currentTime + fwd, Math.max((a.duration || 0) - 0.05, 0));
+  }
+
+  /** 当前句内播放位置（面板进度条轮询用）；非音频引擎或未播放时为 null。 */
+  getPosition(): { positionSec: number; durationSec: number } | null {
+    const a = this.audio;
+    if (!a || this.deps.getVoice().provider.capabilities.direct) return null;
+    if (!isFinite(a.duration) || a.duration <= 0) return null;
+    return { positionSec: a.currentTime, durationSec: a.duration };
+  }
+
+  /** 句内 seek（面板进度条拖动）。 */
+  seekTo(sec: number): void {
+    const a = this.audio;
+    if (!a || !isFinite(a.duration)) return;
+    a.currentTime = Math.min(Math.max(sec, 0), a.duration - 0.05);
+  }
+
   setRate(r: number): void {
     if (this.audio) this.audio.playbackRate = r;
   }
@@ -428,6 +460,7 @@ export class Player {
     } catch (e) {
       if (myGen !== this.gen) return;
       const msg = e instanceof Error ? e.message : String(e);
+      console.error('[voice-aloud] synthesize/play failed:', e);
       new Notice(`${t('player.tts-failed')}：${msg.slice(0, 160)}`);
       this.stop();
     }

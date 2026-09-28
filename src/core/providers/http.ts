@@ -1,11 +1,12 @@
 import { requestUrl } from 'obsidian';
-import type { HttpFn, HttpRequest } from './types';
+import type { HttpFn, HttpRequest, HttpResponse } from './types';
 
 /**
  * 生产环境 HTTP 实现：走 Obsidian requestUrl（免 CORS，桌面/移动一致）。
- * 响应统一为 {status, json, arrayBuffer, text, headers}。
+ * 响应字段全部惰性求值：二进制响应（WAV/MP3）读 .json 会消耗/破坏响应体，
+ * 只有真正被使用的字段才会触发底层读取（合成只读 arrayBuffer，错误路径才读 text/json）。
  */
-export const obsidianHttp: HttpFn = async (req: HttpRequest) => {
+export const obsidianHttp: HttpFn = async (req: HttpRequest): Promise<HttpResponse> => {
   const r = await requestUrl({
     url: req.url,
     method: req.method,
@@ -15,9 +16,15 @@ export const obsidianHttp: HttpFn = async (req: HttpRequest) => {
   });
   return {
     status: r.status,
-    json: r.json,
-    arrayBuffer: r.arrayBuffer,
-    text: r.text,
+    get json() {
+      return r.json;
+    },
+    get arrayBuffer() {
+      return r.arrayBuffer;
+    },
+    get text() {
+      return r.text;
+    },
     headers: (r as unknown as { headers?: Record<string, string> }).headers,
   };
 };

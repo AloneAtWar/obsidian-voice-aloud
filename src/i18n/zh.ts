@@ -17,6 +17,11 @@ export const zh: Record<string, string> = {
   'player.point-read-on': '已进入点读模式：点击正文句子开始朗读',
   'player.point-read-off': '已退出点读模式',
   'player.seek-back': '回退 {n} 秒',
+  'player.seek-forward': '快进 {n} 秒',
+  'player.now-playing': '正在朗读 · 第 {current}/{total} 句',
+  'player.speed-down': '减速',
+  'player.speed-up': '加速',
+  'player.subtitle': '{total} 句 · {voice}',
   'player.locate': '点击定位正文中的当前句',
   'player.rate': '语速',
   'player.prev': '上一句',
@@ -35,6 +40,7 @@ export const zh: Record<string, string> = {
   'command.next': '下一句',
   'command.prev': '上一句',
   'command.seek-back': '回退 {n} 秒',
+  'command.seek-forward': '快进 {n} 秒',
   'command.point-read': '点读模式（切换）',
 
   // ===== 设置 =====

@@ -9,28 +9,45 @@ export interface PlayerPanelHost {
   settings: { rate: number; skipBackSeconds: number };
   isPointReadActive(): boolean;
   togglePointRead(): Promise<void>;
+  activeVoiceLabel(): string;
   saveSettings(): Promise<void>;
 }
 
 const RATES = [0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 
-/** 纯控制面板：控制条 + 进度 + 当前句预览（点击定位正文）+ 点读模式开关 + 预生成。 */
-export class PlayerPanelView extends ItemView {
-  // 不能叫 titleEl：ES2022 类字段会以 define 语义遮蔽 View 基类同名属性（标题栏元素），
-  // 导致 View.load() 里 this.titleEl.setText 读到 undefined
-  private panelTitleEl!: HTMLElement;
-  private statusEl!: HTMLElement;
-  private progressEl!: HTMLElement;
-  private previewEl!: HTMLElement;
-  private playBtn!: HTMLElement;
-  private stopBtn!: HTMLElement;
-  private prevBtn!: HTMLElement;
-  private nextBtn!: HTMLElement;
-  private seekBackBtn!: HTMLElement;
-  private rateSel!: HTMLSelectElement;
-  private pregenBtn!: HTMLElement;
-  private pointReadBtn!: HTMLElement;
+function formatTime(sec: number): string {
+  if (!isFinite(sec) || sec < 0) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
 
+/**
+ * 有声书风格播放面板（视觉参考 obsidian-voice）：
+ * 当前句展示 → 句内进度条 → 传输控制（大播放键）→ 次级控制（点读/预生成/语速）。
+ * 按 250ms 轮询同步进度（与音频引擎解耦，引擎切换无需重接线）。
+ * 按钮使用真 <button>：面板未聚焦时单击依然生效（div 的首次点击会被面板激活吃掉）。
+ */
+export class PlayerPanelView extends ItemView {
+  private headerTitleEl!: HTMLElement;
+  private headerSubtitleEl!: HTMLElement;
+  private nowPlayingEl!: HTMLElement;
+  private nowPlayingTextEl!: HTMLElement;
+  private currentTimeEl!: HTMLElement;
+  private durationEl!: HTMLElement;
+  private scrubberEl!: HTMLInputElement;
+  private playBtn!: HTMLButtonElement;
+  private rewindBtn!: HTMLButtonElement;
+  private forwardBtn!: HTMLButtonElement;
+  private pointReadBtn!: HTMLButtonElement;
+  private pregenBtn!: HTMLButtonElement;
+  private speedDownBtn!: HTMLButtonElement;
+  private speedUpBtn!: HTMLButtonElement;
+  private speedValueEl!: HTMLElement;
+  private statusEl!: HTMLElement;
+  private loadingBarEl!: HTMLElement;
+
+  private isScrubbing = false;
   private unsubState: (() => void) | null = null;
   private unsubCurrent: (() => void) | null = null;
 
@@ -60,6 +77,12 @@ export class PlayerPanelView extends ItemView {
     this.buildDom();
     this.unsubState = this.player.onState(() => this.onState());
     this.unsubCurrent = this.player.onCurrent(() => this.onState());
+    // 250ms 轮询进度条（拖动中让位给用户）
+    this.registerInterval(
+      window.setInterval(() => {
+        if (!this.isScrubbing) this.updateSeek();
+      }, 250),
+    );
     this.onState();
   }
 
@@ -71,136 +94,238 @@ export class PlayerPanelView extends ItemView {
   }
 
   private buildDom(): void {
-    const root = this.contentEl.createDiv('va-root');
+    const root = this.contentEl.createDiv('va-player');
 
-    const header = root.createDiv('va-header');
-    this.panelTitleEl = header.createDiv('va-title');
-    this.panelTitleEl.setText(t('player.display-name'));
+    // Header：笔记名 + 副标题（句数 · 音色）
+    const header = root.createDiv('va-player-header');
+    this.headerTitleEl = header.createDiv('va-player-title');
+    this.headerTitleEl.setText(t('player.display-name'));
+    this.headerSubtitleEl = header.createDiv('va-player-subtitle');
 
-    const toolbar = root.createDiv('va-toolbar');
-
-    this.prevBtn = toolbar.createDiv('va-btn');
-    setIcon(this.prevBtn, 'skip-back');
-    this.prevBtn.ariaLabel = t('player.prev');
-    this.prevBtn.addEventListener('click', () => this.player.prev());
-
-    this.playBtn = toolbar.createDiv('va-btn');
-    setIcon(this.playBtn, 'play');
-    this.playBtn.ariaLabel = t('player.play-pause');
-    this.playBtn.addEventListener('click', () => {
-      if (this.player.isPlaying()) this.player.pause();
-      else this.player.play();
-    });
-
-    this.stopBtn = toolbar.createDiv('va-btn');
-    setIcon(this.stopBtn, 'square');
-    this.stopBtn.ariaLabel = t('player.stop');
-    this.stopBtn.addEventListener('click', () => this.player.stop());
-
-    this.nextBtn = toolbar.createDiv('va-btn');
-    setIcon(this.nextBtn, 'skip-forward');
-    this.nextBtn.ariaLabel = t('player.next');
-    this.nextBtn.addEventListener('click', () => this.player.next());
-
-    this.seekBackBtn = toolbar.createDiv('va-btn');
-    setIcon(this.seekBackBtn, 'rewind');
-    this.seekBackBtn.ariaLabel = t('player.seek-back', { n: this.host.settings.skipBackSeconds });
-    this.seekBackBtn.addEventListener('click', () => this.player.seekBack());
-
-    this.progressEl = toolbar.createDiv('va-progress');
-    this.progressEl.setText('0 / 0');
-
-    toolbar.createDiv('va-toolbar-spacer');
-
-    this.rateSel = toolbar.createEl('select') as HTMLSelectElement;
-    this.rateSel.addClass('va-select');
-    this.rateSel.ariaLabel = t('player.rate');
-    for (const r of RATES) {
-      const o = this.rateSel.createEl('option');
-      o.value = String(r);
-      o.setText(`${r}x`);
-      if (Math.abs(r - this.host.settings.rate) < 0.01) o.selected = true;
-    }
-    this.rateSel.addEventListener('change', async () => {
-      this.host.settings.rate = parseFloat(this.rateSel.value);
-      this.player.setRate(this.host.settings.rate);
-      await this.host.saveSettings();
-    });
-
-    // 整篇预生成：点了就不等合成；生成中再点 = 停止
-    this.pregenBtn = toolbar.createDiv('va-btn va-pregen-btn');
-    setIcon(this.pregenBtn, 'audio-waveform');
-    this.pregenBtn.ariaLabel = t('player.pregen');
-    this.pregenBtn.addEventListener('click', () => void this.player.pregenerateAll());
-
-    // 点读模式开关（进入 = 自动切阅读视图 + 句子可点击）
-    this.pointReadBtn = toolbar.createDiv('va-btn va-pointread-btn');
-    setIcon(this.pointReadBtn, 'pointer');
-    this.pointReadBtn.ariaLabel = t('player.point-read');
-    this.pointReadBtn.addEventListener('click', async () => {
-      await this.host.togglePointRead();
-      this.onState();
-    });
-
-    // 当前句预览：点击定位到正文对应位置
-    this.previewEl = root.createDiv('va-preview');
-    this.previewEl.ariaLabel = t('player.locate');
-    this.previewEl.setText(t('player.open-hint'));
-    this.previewEl.addEventListener('click', () => {
+    // 当前句展示（点击定位正文）
+    const now = root.createDiv('va-player-now');
+    this.nowPlayingEl = now.createDiv('va-player-now-label');
+    this.nowPlayingTextEl = now.createDiv('va-player-now-text');
+    now.addEventListener('click', () => {
       const u = this.player.currentUnit();
       if (!u) return;
       const el = document.querySelector(`.va-sent[data-va="${u.id}"]`);
       if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     });
 
-    this.statusEl = root.createDiv('va-status');
+    // 句内进度条
+    const seek = root.createDiv('va-player-seek');
+    this.currentTimeEl = seek.createSpan('va-player-time');
+    this.currentTimeEl.setText('0:00');
+    this.scrubberEl = seek.createEl('input', 'va-player-scrubber');
+    this.scrubberEl.type = 'range';
+    this.scrubberEl.min = '0';
+    this.scrubberEl.max = '0';
+    this.scrubberEl.value = '0';
+    this.scrubberEl.step = '0.1';
+    this.registerDomEvent(this.scrubberEl, 'input', () => {
+      this.isScrubbing = true;
+      this.currentTimeEl.setText(formatTime(Number(this.scrubberEl.value)));
+    });
+    this.registerDomEvent(this.scrubberEl, 'change', () => {
+      this.player.seekTo(Number(this.scrubberEl.value));
+      this.isScrubbing = false;
+    });
+    this.durationEl = seek.createSpan('va-player-time');
+    this.durationEl.setText('0:00');
+
+    // 传输控制：上一句 | 回退N | 播放/暂停 | 快进N | 下一句
+    const transport = root.createDiv('va-player-transport');
+
+    this.transportBtn(
+      transport,
+      'skip-back',
+      t('player.prev'),
+      () => this.player.prev(),
+      'va-player-track',
+    );
+
+    this.rewindBtn = this.transportBtn(
+      transport,
+      'rewind',
+      t('player.seek-back', { n: this.host.settings.skipBackSeconds }),
+      () => this.player.seekBack(),
+      'va-player-skip',
+    );
+    this.rewindBtn
+      .createSpan('va-player-skip-label')
+      .setText(String(this.host.settings.skipBackSeconds));
+
+    this.playBtn = this.transportBtn(
+      transport,
+      'play',
+      t('player.play-pause'),
+      () => {
+        if (this.player.isPlaying()) this.player.pause();
+        else this.player.play();
+      },
+      'va-player-play',
+    );
+
+    this.forwardBtn = this.transportBtn(
+      transport,
+      'fast-forward',
+      t('player.seek-forward', { n: this.host.settings.skipBackSeconds }),
+      () => this.player.seekForward(),
+      'va-player-skip',
+    );
+    this.forwardBtn
+      .createSpan('va-player-skip-label')
+      .setText(String(this.host.settings.skipBackSeconds));
+
+    this.transportBtn(
+      transport,
+      'skip-forward',
+      t('player.next'),
+      () => this.player.next(),
+      'va-player-track',
+    );
+
+    // 次级控制：点读 | 预生成 | 语速 -/+
+    const secondary = root.createDiv('va-player-secondary');
+
+    this.pointReadBtn = secondary.createEl('button', 'va-player-toggle');
+    setIcon(this.pointReadBtn, 'mouse-pointer-click');
+    this.pointReadBtn.ariaLabel = t('player.point-read');
+    this.pointReadBtn.addEventListener('click', async () => {
+      await this.host.togglePointRead();
+      this.onState();
+    });
+
+    this.pregenBtn = secondary.createEl('button', 'va-player-pregen');
+    this.pregenBtn.ariaLabel = t('player.pregen');
+    this.pregenBtn.addEventListener('click', () => void this.player.pregenerateAll());
+
+    const speedGroup = secondary.createDiv('va-player-speed');
+    this.speedDownBtn = speedGroup.createEl('button', 'va-player-speed-btn');
+    setIcon(this.speedDownBtn, 'minus');
+    this.speedDownBtn.ariaLabel = t('player.speed-down');
+    this.speedDownBtn.addEventListener('click', () => this.stepRate(-1));
+    this.speedValueEl = speedGroup.createSpan('va-player-speed-value');
+    this.speedUpBtn = speedGroup.createEl('button', 'va-player-speed-btn');
+    setIcon(this.speedUpBtn, 'plus');
+    this.speedUpBtn.ariaLabel = t('player.speed-up');
+    this.speedUpBtn.addEventListener('click', () => this.stepRate(1));
+
+    // 状态行
+    this.statusEl = root.createDiv('va-player-status');
+
+    // 合成中的不确定进度条
+    this.loadingBarEl = root.createDiv('va-player-loading');
+    this.loadingBarEl.createDiv('va-player-loading-fill');
+  }
+
+  private transportBtn(
+    parent: HTMLElement,
+    icon: string,
+    label: string,
+    onClick: () => void,
+    extraCls: string,
+  ): HTMLButtonElement {
+    const btn = parent.createEl('button', `va-player-btn ${extraCls}`);
+    setIcon(btn, icon);
+    btn.ariaLabel = label;
+    btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  private stepRate(dir: -1 | 1): void {
+    const cur = RATES.reduce(
+      (best, r) =>
+        Math.abs(r - this.host.settings.rate) < Math.abs(best - this.host.settings.rate) ? r : best,
+      RATES[0],
+    );
+    const idx = RATES.indexOf(cur);
+    const next = RATES[Math.min(RATES.length - 1, Math.max(0, idx + dir))];
+    this.host.settings.rate = next;
+    this.player.setRate(next);
+    void this.host.saveSettings();
+    this.onState();
   }
 
   setNoteTitle(title: string): void {
-    this.panelTitleEl.setText(title || t('player.display-name'));
+    this.headerTitleEl.setText(title || t('player.display-name'));
+    this.onState();
   }
 
   refresh(): void {
     this.onState();
   }
 
+  private updateSeek(): void {
+    const pos = this.player.getPosition();
+    if (!pos) {
+      this.scrubberEl.disabled = true;
+      return;
+    }
+    this.scrubberEl.disabled = false;
+    this.scrubberEl.max = String(Math.max(pos.durationSec - 0.05, 0));
+    if (!this.isScrubbing) {
+      this.scrubberEl.value = String(Math.min(pos.positionSec, pos.durationSec));
+      this.currentTimeEl.setText(formatTime(pos.positionSec));
+    }
+    this.durationEl.setText(formatTime(pos.durationSec));
+  }
+
   private onState(): void {
     const s: PlayerState = this.player.getState();
     setIcon(this.playBtn, s.paused ? 'play' : 'pause');
-    this.progressEl.setText(
-      `${s.currentIdx >= 0 ? s.currentIdx + 1 : 0} / ${s.total}` +
-        (s.loading ? ` · ${t('player.synthesizing')}` : ''),
-    );
-    this.seekBackBtn.ariaLabel = t('player.seek-back', { n: this.host.settings.skipBackSeconds });
+    this.rewindBtn.ariaLabel = t('player.seek-back', { n: this.host.settings.skipBackSeconds });
+    this.forwardBtn.ariaLabel = t('player.seek-forward', { n: this.host.settings.skipBackSeconds });
 
+    // 副标题：句数 · 当前音色
+    this.headerSubtitleEl.setText(
+      s.total ? t('player.subtitle', { total: s.total, voice: this.host.activeVoiceLabel() }) : '',
+    );
+
+    // 当前句展示
     const u = this.player.currentUnit();
     if (u) {
-      this.previewEl.setText(u.text);
-      this.previewEl.addClass('va-preview-live');
+      this.nowPlayingEl.setText(
+        t('player.now-playing', { current: s.currentIdx + 1, total: s.total }),
+      );
+      this.nowPlayingTextEl.setText(u.text);
+      this.nowPlayingTextEl.addClass('is-live');
     } else {
-      this.previewEl.setText(s.total ? t('player.open-hint') : t('player.no-content'));
-      this.previewEl.removeClass('va-preview-live');
+      this.nowPlayingEl.setText(s.total ? t('player.open-hint') : t('player.no-content'));
+      this.nowPlayingTextEl.setText('');
+      this.nowPlayingTextEl.removeClass('is-live');
     }
 
-    this.statusEl.setText(
-      s.pregenActive
-        ? t('player.pregen-running', { done: s.pregenDone, total: s.pregenTotal })
+    // 状态行 + 加载条
+    // 状态行只在有实际状态（预生成/合成中/无内容）时显示，闲置时隐藏（句数已在副标题）
+    const statusText = s.pregenActive
+      ? t('player.pregen-running', { done: s.pregenDone, total: s.pregenTotal })
+      : s.loading
+        ? t('player.synthesizing') + '…'
         : s.total
-          ? t('player.unit-count', { total: s.total })
-          : t('player.no-content'),
-    );
+          ? ''
+          : t('player.no-content');
+    this.statusEl.setText(statusText);
+    this.statusEl.toggleClass('is-hidden', !statusText);
+    this.loadingBarEl.toggleClass('is-active', s.loading || s.pregenActive);
 
-    // 预生成按钮：进行中显示进度并可取消；不支持的引擎置灰
+    // 预生成按钮
     this.pregenBtn.empty();
     if (s.pregenActive) {
       this.pregenBtn.setText(`${s.pregenDone}/${s.pregenTotal}`);
-      this.pregenBtn.addClass('va-btn-active');
+      this.pregenBtn.addClass('is-active');
     } else {
       setIcon(this.pregenBtn, 'audio-waveform');
-      this.pregenBtn.removeClass('va-btn-active');
+      this.pregenBtn.removeClass('is-active');
     }
 
-    // 点读模式按钮状态
-    this.pointReadBtn.toggleClass('va-btn-on', this.host.isPointReadActive());
+    // 点读开关状态
+    this.pointReadBtn.toggleClass('is-active', this.host.isPointReadActive());
+
+    // 语速显示
+    this.speedValueEl.setText(`${this.host.settings.rate}x`);
+
+    this.updateSeek();
   }
 }

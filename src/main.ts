@@ -39,6 +39,10 @@ export default class VoiceAloudPlugin extends Plugin {
       settings: this.settings,
       isPointReadActive: () => this.pointRead.active,
       togglePointRead: () => this.togglePointRead(),
+      activeVoiceLabel: () => {
+        const { provider, account } = resolveActive(this.settings);
+        return account?.name || provider.name;
+      },
       saveSettings: () => this.saveSettings(),
     };
 
@@ -79,6 +83,11 @@ export default class VoiceAloudPlugin extends Plugin {
       id: 'seek-back',
       name: t('command.seek-back', { n: this.settings.skipBackSeconds }),
       callback: () => this.player.seekBack(),
+    });
+    this.addCommand({
+      id: 'seek-forward',
+      name: t('command.seek-forward', { n: this.settings.skipBackSeconds }),
+      callback: () => this.player.seekForward(),
     });
     this.addCommand({
       id: 'point-read',
@@ -207,6 +216,29 @@ export default class VoiceAloudPlugin extends Plugin {
     // 若当前正在播放，补一次当前句高亮
     const cur = this.player.currentUnit();
     if (cur) this.highlighter.setActive(cur.id);
+  }
+
+  /** 实机诊断：用当前账号合成一句，返回完整错误信息（含堆栈）。 */
+  async debugSynthesize(text: string): Promise<unknown> {
+    const { provider, account } = resolveActive(this.settings);
+    if (!account) return { ok: false, message: '当前为系统语音（无账号）' };
+    const startedAt = Date.now();
+    try {
+      const r = await provider.synthesize(account, {
+        text,
+        voice: account.voice,
+        language: account.language,
+      });
+      return { ok: true, bytes: r.data.byteLength, mime: r.mime, ms: Date.now() - startedAt };
+    } catch (e) {
+      return {
+        ok: false,
+        name: e instanceof Error ? e.name : typeof e,
+        message: e instanceof Error ? e.message : String(e),
+        stack: e instanceof Error ? e.stack?.slice(0, 800) : undefined,
+        ms: Date.now() - startedAt,
+      };
+    }
   }
 
   rerenderPreviews(): void {
