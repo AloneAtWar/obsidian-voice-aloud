@@ -8,6 +8,8 @@ export interface VoiceAloudSettings {
   activeAccountId: string | null;
   rate: number;
   skipBackSeconds: number;
+  /** 跟读模式：开启后正文自动滚动跟随当前朗读句（默认开，保留原有体验）。 */
+  followRead: boolean;
 }
 
 export const DEFAULT_SETTINGS: VoiceAloudSettings = {
@@ -15,6 +17,7 @@ export const DEFAULT_SETTINGS: VoiceAloudSettings = {
   activeAccountId: null,
   rate: 1,
   skipBackSeconds: 15,
+  followRead: true,
 };
 
 export interface ResolvedVoice {

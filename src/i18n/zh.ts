@@ -6,7 +6,11 @@ export const zh: Record<string, string> = {
   'player.no-content': '当前笔记没有可朗读内容',
   'player.synthesizing': '合成中',
   'player.pregen': '预生成全文语音',
-  'player.pregen-running': '预生成中 {done}/{total}（点击停止）',
+  'player.pregen-progress': '预生成中 {done}/{total}',
+  'player.pregen-stop': '停止预生成（点击）',
+  'player.follow-read': '跟读模式',
+  'player.follow-read-on': '已开启跟读模式：正文自动滚动跟随当前朗读句',
+  'player.follow-read-off': '已关闭跟读模式：仅高亮，不滚动',
   'player.pregen-done': '预生成完成：{total} 句{failed}，播放无需等待',
   'player.pregen-done-failed': '（失败 {failed} 句）',
   'player.pregen-cancelled': '已停止预生成（完成 {done}/{total}）',
@@ -42,6 +46,7 @@ export const zh: Record<string, string> = {
   'command.seek-back': '回退 {n} 秒',
   'command.seek-forward': '快进 {n} 秒',
   'command.point-read': '点读模式（切换）',
+  'command.follow-read': '跟读模式（切换）',
 
   // ===== 设置 =====
   'settings.current-voice': '当前语音',

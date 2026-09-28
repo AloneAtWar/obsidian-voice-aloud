@@ -39,6 +39,16 @@ export default class VoiceAloudPlugin extends Plugin {
       settings: this.settings,
       isPointReadActive: () => this.pointRead.active,
       togglePointRead: () => this.togglePointRead(),
+      isFollowReadActive: () => this.settings.followRead,
+      toggleFollowRead: async () => {
+        this.settings.followRead = !this.settings.followRead;
+        await this.saveSettings();
+        new Notice(
+          this.settings.followRead ? t('player.follow-read-on') : t('player.follow-read-off'),
+        );
+        // 命令路径也刷新面板按钮状态
+        this.player.notifyExternal();
+      },
       activeVoiceLabel: () => {
         const { provider, account } = resolveActive(this.settings);
         return account?.name || provider.name;
@@ -94,12 +104,17 @@ export default class VoiceAloudPlugin extends Plugin {
       name: t('command.point-read'),
       callback: () => void this.togglePointRead(),
     });
+    this.addCommand({
+      id: 'follow-read',
+      name: t('command.follow-read'),
+      callback: () => void this.panelHost.toggleFollowRead(),
+    });
 
     this.addSettingTab(new VoiceAloudSettingTab(this.app, this));
 
-    // 正文（阅读视图）句子标注 + 播放高亮
+    // 正文（阅读视图）句子标注 + 播放高亮（跟读模式开启时随读滚动）
     registerAnnotationPostProcessor(this, () => this.unitIndex);
-    this.player.onCurrent((id) => this.highlighter.setActive(id));
+    this.player.onCurrent((id) => this.highlighter.setActive(id, this.settings.followRead));
 
     // 点读模式下的点击朗读（事件委托；样式由 body.va-point-read 控制）
     this.registerDomEvent(document, 'click', (ev: MouseEvent) => {
@@ -215,7 +230,7 @@ export default class VoiceAloudPlugin extends Plugin {
     if (n > 0) console.log(`[voice-aloud] 已包装 ${n} 个段落`);
     // 若当前正在播放，补一次当前句高亮
     const cur = this.player.currentUnit();
-    if (cur) this.highlighter.setActive(cur.id);
+    if (cur) this.highlighter.setActive(cur.id, this.settings.followRead);
   }
 
   /** 实机诊断：用当前账号合成一句，返回完整错误信息（含堆栈）。 */

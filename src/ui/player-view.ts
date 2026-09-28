@@ -9,6 +9,8 @@ export interface PlayerPanelHost {
   settings: { rate: number; skipBackSeconds: number };
   isPointReadActive(): boolean;
   togglePointRead(): Promise<void>;
+  isFollowReadActive(): boolean;
+  toggleFollowRead(): Promise<void>;
   activeVoiceLabel(): string;
   saveSettings(): Promise<void>;
 }
@@ -40,12 +42,12 @@ export class PlayerPanelView extends ItemView {
   private rewindBtn!: HTMLButtonElement;
   private forwardBtn!: HTMLButtonElement;
   private pointReadBtn!: HTMLButtonElement;
+  private followReadBtn!: HTMLButtonElement;
   private pregenBtn!: HTMLButtonElement;
   private speedDownBtn!: HTMLButtonElement;
   private speedUpBtn!: HTMLButtonElement;
   private speedValueEl!: HTMLElement;
   private statusEl!: HTMLElement;
-  private loadingBarEl!: HTMLElement;
 
   private isScrubbing = false;
   private unsubState: (() => void) | null = null;
@@ -186,7 +188,7 @@ export class PlayerPanelView extends ItemView {
       'va-player-track',
     );
 
-    // 次级控制：点读 | 预生成 | 语速 -/+
+    // 次级控制：点读 | 跟读 | 预生成（进行中显示百分比，再点停止）| 语速 -/+
     const secondary = root.createDiv('va-player-secondary');
 
     this.pointReadBtn = secondary.createEl('button', 'va-player-toggle');
@@ -197,7 +199,16 @@ export class PlayerPanelView extends ItemView {
       this.onState();
     });
 
+    this.followReadBtn = secondary.createEl('button', 'va-player-toggle');
+    setIcon(this.followReadBtn, 'book-open-text');
+    this.followReadBtn.ariaLabel = t('player.follow-read');
+    this.followReadBtn.addEventListener('click', async () => {
+      await this.host.toggleFollowRead();
+      this.onState();
+    });
+
     this.pregenBtn = secondary.createEl('button', 'va-player-pregen');
+    setIcon(this.pregenBtn, 'audio-waveform');
     this.pregenBtn.ariaLabel = t('player.pregen');
     this.pregenBtn.addEventListener('click', () => void this.player.pregenerateAll());
 
@@ -212,12 +223,8 @@ export class PlayerPanelView extends ItemView {
     this.speedUpBtn.ariaLabel = t('player.speed-up');
     this.speedUpBtn.addEventListener('click', () => this.stepRate(1));
 
-    // 状态行
+    // 状态行（预生成进度等）
     this.statusEl = root.createDiv('va-player-status');
-
-    // 合成中的不确定进度条
-    this.loadingBarEl = root.createDiv('va-player-loading');
-    this.loadingBarEl.createDiv('va-player-loading-fill');
   }
 
   private transportBtn(
@@ -274,9 +281,18 @@ export class PlayerPanelView extends ItemView {
 
   private onState(): void {
     const s: PlayerState = this.player.getState();
-    setIcon(this.playBtn, s.paused ? 'play' : 'pause');
     this.rewindBtn.ariaLabel = t('player.seek-back', { n: this.host.settings.skipBackSeconds });
     this.forwardBtn.ariaLabel = t('player.seek-forward', { n: this.host.settings.skipBackSeconds });
+
+    // 播放大圆钮：合成中转圈，其余时间为播放/暂停图标（不显示百分比）
+    this.playBtn.empty();
+    if (s.loading) {
+      setIcon(this.playBtn, 'loader-circle');
+      this.playBtn.addClass('is-spinning');
+    } else {
+      this.playBtn.removeClass('is-spinning');
+      setIcon(this.playBtn, s.paused ? 'play' : 'pause');
+    }
 
     // 副标题：句数 · 当前音色
     this.headerSubtitleEl.setText(
@@ -297,31 +313,30 @@ export class PlayerPanelView extends ItemView {
       this.nowPlayingTextEl.removeClass('is-live');
     }
 
-    // 状态行 + 加载条
-    // 状态行只在有实际状态（预生成/合成中/无内容）时显示，闲置时隐藏（句数已在副标题）
+    // 状态行：预生成进度；闲置隐藏
     const statusText = s.pregenActive
-      ? t('player.pregen-running', { done: s.pregenDone, total: s.pregenTotal })
-      : s.loading
-        ? t('player.synthesizing') + '…'
-        : s.total
-          ? ''
-          : t('player.no-content');
+      ? t('player.pregen-progress', { done: s.pregenDone, total: s.pregenTotal })
+      : s.total
+        ? ''
+        : t('player.no-content');
     this.statusEl.setText(statusText);
     this.statusEl.toggleClass('is-hidden', !statusText);
-    this.loadingBarEl.toggleClass('is-active', s.loading || s.pregenActive);
 
-    // 预生成按钮
+    // 预生成按钮：进行中显示百分比（再点一次即停止），闲置显示波形图标
     this.pregenBtn.empty();
-    if (s.pregenActive) {
-      this.pregenBtn.setText(`${s.pregenDone}/${s.pregenTotal}`);
+    if (s.pregenActive && s.pregenTotal > 0) {
+      this.pregenBtn.setText(`${Math.round((s.pregenDone / s.pregenTotal) * 100)}%`);
       this.pregenBtn.addClass('is-active');
+      this.pregenBtn.ariaLabel = t('player.pregen-stop');
     } else {
       setIcon(this.pregenBtn, 'audio-waveform');
       this.pregenBtn.removeClass('is-active');
+      this.pregenBtn.ariaLabel = t('player.pregen');
     }
 
-    // 点读开关状态
+    // 点读/跟读开关状态
     this.pointReadBtn.toggleClass('is-active', this.host.isPointReadActive());
+    this.followReadBtn.toggleClass('is-active', this.host.isFollowReadActive());
 
     // 语速显示
     this.speedValueEl.setText(`${this.host.settings.rate}x`);

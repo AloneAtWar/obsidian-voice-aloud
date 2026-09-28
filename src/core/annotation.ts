@@ -11,14 +11,15 @@ import { splitParagraphExact, type ReadingUnit, type UnitIndex } from './sentenc
 export class NoteHighlighter {
   private lastId: string | null = null;
 
-  setActive(id: string | null): void {
+  /** 高亮当前句；follow=true（跟读模式）时同时滚动到可视区。 */
+  setActive(id: string | null, follow = true): void {
     this.lastId = id;
     document.querySelectorAll('.va-sent.va-active').forEach((el) => el.removeClass('va-active'));
     if (!id) return;
     const els = document.querySelectorAll<HTMLElement>(`.va-sent[data-va="${id}"]`);
     if (els.length) {
       els.forEach((el) => el.addClass('va-active'));
-      els[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (follow) els[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
     // 阅读视图懒渲染：目标句所在区块可能尚未渲染，滚动触发渲染后重试
@@ -28,7 +29,7 @@ export class NoteHighlighter {
       const again = document.querySelectorAll<HTMLElement>(`.va-sent[data-va="${id}"]`);
       if (again.length) {
         again.forEach((el) => el.addClass('va-active'));
-        again[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        if (follow) again[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
       } else {
         window.setTimeout(retry, 350);
       }

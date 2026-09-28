@@ -261,7 +261,7 @@ export class Player {
     if (this.audio) this.audio.playbackRate = r;
   }
 
-  /** 整篇预生成：逐句合成落缓存；再次调用 = 取消。已缓存的句子自动跳过。 */
+  /** 整篇预生成：逐句合成落缓存；进行中再次调用 = 停止。已缓存的句子自动跳过。 */
   async pregenerateAll(): Promise<void> {
     if (this.pregenFlag) {
       this.pregenFlag = false;
