@@ -304,5 +304,8 @@ export default class VoiceAloudPlugin extends Plugin {
     this.player.dispose();
     this.pointRead.exit();
     this.storage.close();
+    // 卸载时移除面板叶子：否则插件重载后残留旧视图实例（闭包指向旧 settings），
+    // 面板上的账号/音色切换会写进旧对象、播放器读不到
+    this.app.workspace.getLeavesOfType(VIEW_TYPE_VOICE_ALOUD).forEach((l) => l.detach());
   }
 }

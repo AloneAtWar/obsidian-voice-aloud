@@ -41,58 +41,54 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
     this.renderCacheSection(containerEl.createDiv());
   }
 
-  /** 播放参数（账号/音色不做全局绑定，在播放器面板上选择）。 */
+  /** 播放参数（语速恒为 1x 起步、面板 −/+ 调节；账号/音色在播放器面板上选择）。 */
   private renderPlaybackSection(root: HTMLElement): void {
-    new Setting(root)
-      .setName(t('settings.rate'))
-      .setDesc(t('settings.rate-desc'))
-      .addDropdown((d) => {
-        for (const r of [0.75, 1, 1.25, 1.5, 2, 2.5, 3]) {
-          d.addOption(String(r), `${r}x`);
-        }
-        d.setValue(String(this.host.settings.rate));
-        d.onChange(async (v) => {
-          this.host.settings.rate = parseFloat(v);
-          await this.host.saveSettings();
-        });
-      });
+    new Setting(root).setName(t('settings.playback')).setHeading();
 
+    const valueEl = root.createDiv('va-setting-hint');
+    const syncValue = () => {
+      valueEl.setText(t('settings.skip-back-value', { n: this.host.settings.skipBackSeconds }));
+    };
+    syncValue();
     new Setting(root)
       .setName(t('settings.skip-back'))
       .setDesc(t('settings.skip-back-desc'))
-      .addText((txt) =>
-        txt.setValue(String(this.host.settings.skipBackSeconds)).onChange(async (v) => {
-          const n = Math.min(60, Math.max(1, parseInt(v, 10) || 15));
-          if (String(n) !== v) txt.setValue(String(n));
-          this.host.settings.skipBackSeconds = n;
-          await this.host.saveSettings();
-          this.host.refreshPlayerViews();
-        }),
+      .addSlider((s) =>
+        s
+          .setLimits(1, 60, 1)
+          .setValue(this.host.settings.skipBackSeconds)
+          .onChange(async (v: number) => {
+            this.host.settings.skipBackSeconds = v;
+            syncValue();
+            await this.host.saveSettings();
+            this.host.refreshPlayerViews();
+          }),
       );
   }
 
   private renderAccountsSection(root: HTMLElement): void {
-    new Setting(root).setName(t('settings.accounts')).setDesc(t('settings.accounts-desc'));
+    new Setting(root)
+      .setName(t('settings.accounts'))
+      .setDesc(t('settings.accounts-desc'))
+      .setHeading();
 
     if (!this.host.settings.accounts.length) {
       root.createDiv({ text: t('settings.no-accounts'), cls: 'va-setting-hint' });
     }
     for (const acc of this.host.settings.accounts) {
       const provider = getProvider(acc.providerId);
-      const voice =
-        this.host.settings.voiceByAccount[acc.id] &&
-        this.host.settings.voiceByAccount[acc.id] !== acc.voice
-          ? this.host.settings.voiceByAccount[acc.id]
-          : acc.voice;
       new Setting(root)
         .setName(acc.name || acc.id)
-        .setDesc(`${provider?.name ?? acc.providerId} · ${t('account.voice')}: ${voice}`)
+        .setDesc(
+          `${provider?.name ?? acc.providerId} · ${t('settings.default-voice')}: ${acc.voice}`,
+        )
         .addButton((b: ButtonComponent) =>
           b.setButtonText(t('settings.edit')).onClick(() => {
             new AccountModal(this.app, acc, async (saved) => {
               const idx = this.host.settings.accounts.findIndex((a) => a.id === saved.id);
               if (idx >= 0) this.host.settings.accounts[idx] = saved;
               await this.host.saveSettings();
+              this.host.refreshPlayerViews();
               this.display();
             }).open();
           }),
@@ -122,6 +118,7 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
           new AccountModal(this.app, null, async (saved) => {
             this.host.settings.accounts.push(saved);
             await this.host.saveSettings();
+            this.host.refreshPlayerViews();
             this.display();
           }).open();
         }),
@@ -129,7 +126,10 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
   }
 
   private renderCacheSection(container: HTMLElement): void {
-    new Setting(container).setName(t('settings.cache')).setDesc(t('settings.cache-desc'));
+    new Setting(container)
+      .setName(t('settings.cache'))
+      .setDesc(t('settings.cache-desc'))
+      .setHeading();
 
     // 配置过滤（全部 / 账号·音色）
     const filterRow = container.createDiv('va-cache-filter');

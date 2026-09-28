@@ -52,10 +52,11 @@ export const zh: Record<string, string> = {
   'command.follow-read': '跟读模式（切换）',
 
   // ===== 设置 =====
-  'settings.rate': '朗读语速',
-  'settings.rate-desc': '音频变速（1 为原速）',
+  'settings.playback': '播放',
   'settings.skip-back': '回退秒数',
   'settings.skip-back-desc': '「回退」按钮/命令回退的秒数（1–60）',
+  'settings.skip-back-value': '当前 {n} 秒',
+  'settings.default-voice': '默认音色',
   'settings.accounts': '语音服务账号',
   'settings.accounts-desc':
     '添加并配置 TTS 供应商实例（OpenAI 兼容端点、Qwen3-TTS、MiMo 等）。账号与音色在播放器面板上按次选择，不做全局绑定。',
@@ -89,8 +90,8 @@ export const zh: Record<string, string> = {
   'account.model': '模型',
   'account.model-optional': '模型（可选）',
   'account.voice': '音色',
-  'account.voice-refresh': '刷新音色',
-  'account.voice-fetched': '已获取 {n} 个音色',
+  'account.voice-default-optional': '默认音色（可选）',
+  'account.voice-default-desc': '该类端点无法自动发现音色；此处填写后作为默认值，面板上仍可切换',
   'account.language': '语言',
   'account.style': '风格指令（可选）',
   'account.style-desc': '如「温柔」「东北话」等，随请求发送，不会被读出',

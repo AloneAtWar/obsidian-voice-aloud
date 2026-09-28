@@ -4,11 +4,9 @@ import { LANGUAGES, type TtsAccountConfig } from '../core/providers/types';
 import { newAccount } from '../core/accounts';
 import { t } from '../i18n';
 
-/** 账号新建/编辑弹窗：供应商选择 + 供应商相关字段 + 测试连接。 */
+/** 账号新建/编辑弹窗：供应商选择 + 供应商相关字段 + 测试连接（音色在播放器面板上按次选择）。 */
 export class AccountModal extends Modal {
   private account: TtsAccountConfig;
-  private voices: string[] = [];
-  private voicesLoaded = false;
 
   constructor(
     app: App,
@@ -28,19 +26,6 @@ export class AccountModal extends Modal {
       this.account.name ? t('account.modal-title-edit') : t('account.modal-title-new'),
     );
     this.renderForm();
-    await this.loadVoices();
-    this.renderForm();
-  }
-
-  private async loadVoices(): Promise<void> {
-    const provider = getProvider(this.account.providerId);
-    if (!provider) return;
-    try {
-      this.voices = await provider.listVoices(this.account);
-      this.voicesLoaded = true;
-    } catch {
-      this.voices = [];
-    }
   }
 
   private renderForm(): void {
@@ -53,11 +38,8 @@ export class AccountModal extends Modal {
         d.addOption(p.id, p.name);
       }
       d.setValue(this.account.providerId);
-      d.onChange(async (v) => {
+      d.onChange((v) => {
         this.account = newAccount(v, { name: this.account.name });
-        this.voicesLoaded = false;
-        this.renderForm();
-        await this.loadVoices();
         this.renderForm();
       });
     });
@@ -115,37 +97,20 @@ export class AccountModal extends Modal {
       );
     }
 
-    // 音色：有列表（端点发现/静态）→ 下拉 + 刷新；否则自由填写
-    const voiceSetting = new Setting(body).setName(t('account.voice'));
-    if (provider?.capabilities.voiceList || (this.voicesLoaded && this.voices.length > 0)) {
-      voiceSetting.addDropdown((d) => {
-        for (const v of this.voices) d.addOption(v, v);
-        if (this.account.voice && !this.voices.includes(this.account.voice)) {
-          d.addOption(this.account.voice, this.account.voice);
-        }
-        d.setValue(this.account.voice);
-        d.onChange((v) => {
-          this.account.voice = v;
-        });
-      });
-      if (provider?.capabilities.voiceList) {
-        voiceSetting.addButton((b: ButtonComponent) =>
-          b.setButtonText(t('account.voice-refresh')).onClick(async () => {
-            await this.loadVoices();
-            new Notice(t('account.voice-fetched', { n: this.voices.length }));
-            this.renderForm();
-          }),
+    // 音色只在账号里保留「无发现端点」供应商的默认值（面板上按次切换）；
+    // Qwen3/MiMo 等有音色来源的供应商使用默认音色，不在账号里配置
+    if (provider?.id === 'openai-compatible') {
+      new Setting(body)
+        .setName(t('account.voice-default-optional'))
+        .setDesc(t('account.voice-default-desc'))
+        .addText((txt) =>
+          txt
+            .setPlaceholder('alloy')
+            .setValue(this.account.voice)
+            .onChange((v) => {
+              this.account.voice = v.trim();
+            }),
         );
-      }
-    } else {
-      voiceSetting.addText((txt) =>
-        txt
-          .setPlaceholder('alloy')
-          .setValue(this.account.voice)
-          .onChange((v) => {
-            this.account.voice = v.trim();
-          }),
-      );
     }
 
     new Setting(body).setName(t('account.language')).addDropdown((d) => {

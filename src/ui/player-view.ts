@@ -318,6 +318,8 @@ export class PlayerPanelView extends ItemView {
   }
 
   refresh(): void {
+    // 账号列表可能已变（设置页增删改），重建下拉选项
+    void this.renderOptions();
     this.onState();
   }
 

@@ -408,6 +408,9 @@ export class Player {
     if (myGen !== this.gen) return;
     const u = this.units[i];
     if (!u) return;
+    // 立即停掉上一段声音：点击换句时旧音频马上静音，不等新句合成完毕
+    this.deps.getVoice().provider.cancelDirect?.();
+    if (this.audio && !this.audio.paused) this.audio.pause();
     this.curIdx = i;
     this.playingFlag = true;
     this.pausedFlag = false;
