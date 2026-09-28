@@ -6,8 +6,8 @@ import type { TtsProvider } from './types';
 
 /** 供应商注册表（借鉴 aloud-tts 的 REGISTRY 模式）：新供应商在此登记即全插件可用。 */
 export const PROVIDER_LIST: TtsProvider[] = [
-  qwen3Provider,
   openaiCompatibleProvider,
+  qwen3Provider,
   mimoProvider,
   webspeechProvider,
 ];
