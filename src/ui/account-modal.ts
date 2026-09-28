@@ -16,7 +16,10 @@ export class AccountModal extends Modal {
     private onSave: (account: TtsAccountConfig) => void,
   ) {
     super(app);
-    this.account = account ? structuredClone(account) : newAccount(PROVIDER_LIST[0].id);
+    // 账号配置是纯 JSON 数据，JSON 克隆零平台风险
+    this.account = account
+      ? (JSON.parse(JSON.stringify(account)) as TtsAccountConfig)
+      : newAccount(PROVIDER_LIST[0].id);
   }
 
   override async onOpen(): Promise<void> {

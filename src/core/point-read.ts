@@ -43,9 +43,11 @@ export class PointReadMode {
   private async enter(): Promise<void> {
     const workspace = this.plugin.app.workspace;
     const view = workspace.getActiveViewOfType(MarkdownView);
-    const leaf: WorkspaceLeaf | null = view?.leaf ?? workspace.getMostRecentLeaf() ?? null;
+    // 没有打开的笔记就没有可点读的正文，静默不进入
+    if (!view) return;
+    const leaf: WorkspaceLeaf | null = view.leaf ?? null;
     if (!leaf) return;
-    if (view && view.getMode() !== 'preview') {
+    if (view.getMode() !== 'preview') {
       const state = view.getState();
       await leaf.setViewState({
         type: 'markdown',

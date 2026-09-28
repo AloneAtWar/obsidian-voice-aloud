@@ -174,9 +174,11 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
       });
     }
 
-    // 全部清空按钮（幂等重建）
-    container.querySelectorAll('.va-cache-clear-all').forEach((el) => el.remove());
-    new Setting(container)
+    // 刷新/全部清空按钮（renderCacheData 会被反复调用，先清掉旧实例）
+    container.querySelectorAll('.va-cache-actions').forEach((el) => el.remove());
+    const actions = new Setting(container);
+    actions.settingEl.addClass('va-cache-actions');
+    actions
       .addButton((b: ButtonComponent) =>
         b.setButtonText(t('settings.cache-refresh')).onClick(() => this.display()),
       )

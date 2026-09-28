@@ -176,6 +176,7 @@ export class Player {
     } else if (this.playingFlag && this.deps.getVoice().provider.capabilities.direct) {
       this.deps.getVoice().provider.cancelDirect?.();
       this.pausedFlag = true;
+      this.emit();
     }
   }
 
