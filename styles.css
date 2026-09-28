@@ -324,6 +324,30 @@
   display: none;
 }
 
+/* 账号 / 音色选择行 */
+.va-player-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.va-player-select {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-smaller);
+  color: var(--text-normal);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 3px 6px;
+}
+
+.va-player-voice-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
 /* 播放大圆钮：合成中转圈 */
 .va-player-play.is-spinning svg {
   animation: va-spin 0.9s linear infinite;
@@ -354,6 +378,24 @@
   margin-bottom: 8px;
 }
 
+.va-cache-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.va-cache-filter-label {
+  font-size: var(--font-smaller);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.va-cache-filter-select {
+  max-width: 260px;
+  font-size: var(--font-smaller);
+}
+
 .va-cache-row {
   display: flex;
   align-items: center;
@@ -365,8 +407,22 @@
 .va-cache-note-path {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.va-cache-note-name {
   font-size: var(--font-smaller);
   color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.va-cache-note-owner {
+  font-size: var(--font-smallest);
+  color: var(--text-accent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

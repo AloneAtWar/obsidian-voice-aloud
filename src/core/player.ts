@@ -1,7 +1,7 @@
 import { Notice } from 'obsidian';
 import { t } from '../i18n';
 import type { ResolvedVoice } from './accounts';
-import { audioCacheKey } from './cache/key';
+import { audioCacheKey, canonicalExtra } from './cache/key';
 import type { AudioStorage } from './cache/storage';
 import {
   bindMediaSession,
@@ -365,6 +365,7 @@ export class Player {
       model: account.model,
       voice: account.voice,
       language: account.language,
+      extra: canonicalExtra(account.extra),
       text,
     });
     const hit = this.urlCache.get(key);
@@ -391,7 +392,11 @@ export class Player {
     const notePath = this.deps.getNotePath();
     if (notePath) {
       try {
-        await this.deps.storage.put(key, blob, result.mime, notePath);
+        await this.deps.storage.put(key, blob, result.mime, notePath, {
+          accountId: account.id,
+          accountName: account.name || account.id,
+          voice: account.voice,
+        });
       } catch {
         /* 缓存写失败不影响播放 */
       }

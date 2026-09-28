@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { audioCacheKey } from '../src/core/cache/key';
+import { audioCacheKey, canonicalExtra } from '../src/core/cache/key';
 
 const base = {
   accountId: 'acct-1',
@@ -36,6 +36,19 @@ describe('audioCacheKey', () => {
     expect(await audioCacheKey(base)).not.toBe(
       await audioCacheKey({ ...base, language: 'English' }),
     );
+  });
+
+  it('换额外参数（如风格指令）→ 键变', async () => {
+    expect(await audioCacheKey(base)).not.toBe(
+      await audioCacheKey({ ...base, extra: 'style=温柔' }),
+    );
+  });
+
+  it('canonicalExtra：键排序归一，空对象/undefined 为空', () => {
+    expect(canonicalExtra(undefined)).toBeUndefined();
+    expect(canonicalExtra({})).toBeUndefined();
+    expect(canonicalExtra({ b: '2', a: '1' })).toBe('a=1&b=2');
+    expect(canonicalExtra({ a: '1', b: '2' })).toBe('a=1&b=2');
   });
 
   it('改句子文本 → 键变（缓存失效的核心机制）', async () => {

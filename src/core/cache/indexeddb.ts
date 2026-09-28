@@ -1,13 +1,20 @@
-import type { AudioStorage, CacheStats, CachedAudio, NoteCacheInfo } from './storage';
+import {
+  sameOwner,
+  type AudioStorage,
+  type CacheOwner,
+  type CacheStats,
+  type CachedAudio,
+  type NoteCacheInfo,
+} from './storage';
 
 /**
  * IndexedDB 音频缓存（桌面/移动一致）。
- * 单 store 设计：每条记录自带 notePath，按笔记统计/清理/改名都是一次游标遍历，
- * 不需要单独的反向索引，也就不存在索引与音频不一致的问题。
+ * v2：记录自带 notePath + 归属（账号/音色），按笔记×配置统计/清理/改名都是游标遍历。
+ * 从 v1 升级时旧记录缺归属字段，直接清空重建（缓存可再生）。
  */
 
 const DB_NAME = 'voice-aloud';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'audio';
 
 interface AudioRecord {
@@ -17,6 +24,7 @@ interface AudioRecord {
   createdAt: number;
   bytes: number;
   notePath: string;
+  owner: CacheOwner;
 }
 
 function openDb(): Promise<IDBDatabase> {
@@ -24,9 +32,11 @@ function openDb(): Promise<IDBDatabase> {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: 'key' });
+      // v1 记录没有 owner 字段，无法归类 → 清空重建
+      if (db.objectStoreNames.contains(STORE)) {
+        db.deleteObjectStore(STORE);
       }
+      db.createObjectStore(STORE, { keyPath: 'key' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error ?? new Error('indexedDB open failed'));
@@ -88,7 +98,13 @@ export class IndexedDbAudioStorage implements AudioStorage {
     return { blob: rec.blob, mime: rec.mime };
   }
 
-  async put(key: string, blob: Blob, mime: string, notePath: string): Promise<void> {
+  async put(
+    key: string,
+    blob: Blob,
+    mime: string,
+    notePath: string,
+    owner: CacheOwner,
+  ): Promise<void> {
     const rec: AudioRecord = {
       key,
       blob,
@@ -96,6 +112,7 @@ export class IndexedDbAudioStorage implements AudioStorage {
       createdAt: Date.now(),
       bytes: blob.size,
       notePath,
+      owner,
     };
     await withStore('readwrite', (store) => wrap(store.put(rec)));
   }
@@ -116,27 +133,37 @@ export class IndexedDbAudioStorage implements AudioStorage {
     return { entries, bytes };
   }
 
-  async listByNote(): Promise<NoteCacheInfo[]> {
-    const byNote = new Map<string, NoteCacheInfo>();
+  async listByNote(owner?: CacheOwner): Promise<NoteCacheInfo[]> {
+    const byKey = new Map<string, NoteCacheInfo>();
     await cursorWalk((rec) => {
       if (!rec || typeof rec !== 'object') return;
+      const recOwner = rec.owner ?? { accountId: '?', accountName: '?', voice: '?' };
+      if (owner && !sameOwner(owner, recOwner)) return;
       const path = rec.notePath ?? '(未知笔记)';
-      const cur = byNote.get(path) ?? { notePath: path, entries: 0, bytes: 0, updatedAt: 0 };
+      const mapKey = `${path}\u0000${recOwner.accountId}\u0000${recOwner.voice}`;
+      const cur = byKey.get(mapKey) ?? {
+        notePath: path,
+        owner: recOwner,
+        entries: 0,
+        bytes: 0,
+        updatedAt: 0,
+      };
       cur.entries++;
       cur.bytes += rec.bytes ?? rec.blob?.size ?? 0;
       cur.updatedAt = Math.max(cur.updatedAt, rec.createdAt ?? 0);
-      byNote.set(path, cur);
+      byKey.set(mapKey, cur);
     });
-    return Array.from(byNote.values()).sort((a, b) => b.bytes - a.bytes);
+    return Array.from(byKey.values()).sort((a, b) => b.bytes - a.bytes);
   }
 
-  async removeNote(notePath: string): Promise<number> {
+  async removeNote(notePath: string, owner?: CacheOwner): Promise<number> {
     let removed = 0;
     await cursorWalk((rec, store) => {
-      if (rec && rec.notePath === notePath) {
-        store.delete(rec.key);
-        removed++;
-      }
+      if (!rec || rec.notePath !== notePath) return;
+      const recOwner = rec.owner;
+      if (owner && !sameOwner(owner, recOwner)) return;
+      store.delete(rec.key);
+      removed++;
     });
     return removed;
   }

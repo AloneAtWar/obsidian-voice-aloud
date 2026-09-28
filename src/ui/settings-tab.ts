@@ -1,6 +1,6 @@
 import { App, ButtonComponent, PluginSettingTab, Setting } from 'obsidian';
 import { Notice } from 'obsidian';
-import type { NoteCacheInfo, CacheStats } from '../core/cache/storage';
+import type { AudioStorage, CacheOwner, CacheStats, NoteCacheInfo } from '../core/cache/storage';
 import { getProvider } from '../core/providers/registry';
 import { AccountModal } from './account-modal';
 import { t } from '../i18n';
@@ -8,7 +8,7 @@ import { t } from '../i18n';
 export interface SettingsTabHost {
   settings: import('../core/accounts').VoiceAloudSettings;
   saveSettings(): Promise<void>;
-  storage: import('../core/cache/storage').AudioStorage;
+  storage: AudioStorage;
   refreshPlayerViews(): void;
 }
 
@@ -18,8 +18,14 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
+function ownerLabel(owner: CacheOwner): string {
+  return `${owner.accountName} · ${owner.voice}`;
+}
+
 export class VoiceAloudSettingTab extends PluginSettingTab {
   private host: SettingsTabHost;
+  /** 缓存配置过滤：'' = 全部；格式 accountId\u0000voice */
+  private cacheFilter = '';
 
   constructor(app: App, plugin: import('obsidian').Plugin & SettingsTabHost) {
     // PluginSettingTab 构造函数会读 plugin.manifest.name/id，必须传真实插件实例
@@ -30,30 +36,13 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
   override display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    this.renderVoiceSection(containerEl);
+    this.renderPlaybackSection(containerEl);
     this.renderAccountsSection(containerEl);
     this.renderCacheSection(containerEl.createDiv());
   }
 
-  private renderVoiceSection(root: HTMLElement): void {
-    new Setting(root)
-      .setName(t('settings.current-voice'))
-      .setDesc(t('settings.current-voice-desc'));
-
-    new Setting(root).addDropdown((d) => {
-      d.addOption('', t('settings.voice-system'));
-      for (const acc of this.host.settings.accounts) {
-        const label = getProvider(acc.providerId)?.name ?? acc.providerId;
-        d.addOption(acc.id, `${acc.name}（${label}）`);
-      }
-      d.setValue(this.host.settings.activeAccountId ?? '');
-      d.onChange(async (v) => {
-        this.host.settings.activeAccountId = v || null;
-        await this.host.saveSettings();
-        this.host.refreshPlayerViews();
-      });
-    });
-
+  /** 播放参数（账号/音色不做全局绑定，在播放器面板上选择）。 */
+  private renderPlaybackSection(root: HTMLElement): void {
     new Setting(root)
       .setName(t('settings.rate'))
       .setDesc(t('settings.rate-desc'))
@@ -90,10 +79,14 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
     }
     for (const acc of this.host.settings.accounts) {
       const provider = getProvider(acc.providerId);
-      const isActive = this.host.settings.activeAccountId === acc.id;
+      const voice =
+        this.host.settings.voiceByAccount[acc.id] &&
+        this.host.settings.voiceByAccount[acc.id] !== acc.voice
+          ? this.host.settings.voiceByAccount[acc.id]
+          : acc.voice;
       new Setting(root)
-        .setName(`${isActive ? '● ' : ''}${acc.name}`)
-        .setDesc(provider?.name ?? acc.providerId)
+        .setName(acc.name || acc.id)
+        .setDesc(`${provider?.name ?? acc.providerId} · ${t('account.voice')}: ${voice}`)
         .addButton((b: ButtonComponent) =>
           b.setButtonText(t('settings.edit')).onClick(() => {
             new AccountModal(this.app, acc, async (saved) => {
@@ -113,6 +106,7 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
             if (this.host.settings.activeAccountId === acc.id) {
               this.host.settings.activeAccountId = null;
             }
+            delete this.host.settings.voiceByAccount[acc.id];
             await this.host.saveSettings();
             this.host.refreshPlayerViews();
             this.display();
@@ -135,32 +129,67 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
   }
 
   private renderCacheSection(container: HTMLElement): void {
-    new Setting(container).setName(t('settings.cache'));
+    new Setting(container).setName(t('settings.cache')).setDesc(t('settings.cache-desc'));
 
-    const listEl = container.createDiv('va-cache-list');
-    const statsEl = container.createDiv('va-setting-hint');
-    void this.renderCacheData(statsEl, listEl, container);
+    // 配置过滤（全部 / 账号·音色）
+    const filterRow = container.createDiv('va-cache-filter');
+    filterRow.createSpan({ text: t('settings.cache-config-filter'), cls: 'va-cache-filter-label' });
+    const filterSel = filterRow.createEl('select', 'va-cache-filter-select dropdown');
+    filterSel.addEventListener('change', () => {
+      this.cacheFilter = filterSel.value;
+      void this.renderCacheData(container);
+    });
+
+    container.createDiv('va-cache-list');
+    container.createDiv('va-setting-hint');
+    void this.renderCacheData(container);
   }
 
-  private async renderCacheData(
-    statsEl: HTMLElement,
-    listEl: HTMLElement,
-    container: HTMLElement,
-  ): Promise<void> {
+  private async renderCacheData(container: HTMLElement): Promise<void> {
     const storage = this.host.storage;
-    const stats: CacheStats = await storage.stats();
-    statsEl.setText(
-      t('settings.cache-stats', { entries: stats.entries, size: formatBytes(stats.bytes) }),
-    );
+    const all: NoteCacheInfo[] = await storage.listByNote();
 
+    // 重建过滤下拉（renderCacheData 会被反复调用）
+    const filterSel = container.querySelector<HTMLSelectElement>('.va-cache-filter-select');
+    if (filterSel) {
+      const owners = new Map<string, CacheOwner>();
+      for (const info of all) {
+        owners.set(`${info.owner.accountId}\u0000${info.owner.voice}`, info.owner);
+      }
+      filterSel.empty();
+      filterSel.createEl('option', { value: '', text: t('settings.cache-all-configs') });
+      for (const [key, owner] of owners) {
+        filterSel.createEl('option', { value: key, text: ownerLabel(owner) });
+      }
+      filterSel.value = this.cacheFilter;
+    }
+
+    // 统计：过滤后合计
+    const filtered = this.cacheFilter
+      ? all.filter((n) => `${n.owner.accountId}\u0000${n.owner.voice}` === this.cacheFilter)
+      : all;
+    const statsEl = container.querySelector('.va-setting-hint');
+    if (statsEl) {
+      const stats: CacheStats = {
+        entries: filtered.reduce((s, n) => s + n.entries, 0),
+        bytes: filtered.reduce((s, n) => s + n.bytes, 0),
+      };
+      statsEl.setText(
+        t('settings.cache-stats', { entries: stats.entries, size: formatBytes(stats.bytes) }),
+      );
+    }
+
+    const listEl = container.querySelector('.va-cache-list');
+    if (!listEl) return;
     listEl.empty();
-    const notes: NoteCacheInfo[] = await storage.listByNote();
-    if (!notes.length) {
+    if (!filtered.length) {
       listEl.createDiv({ text: t('settings.cache-empty'), cls: 'va-setting-hint' });
     }
-    for (const note of notes) {
+    for (const note of filtered) {
       const row = listEl.createDiv('va-cache-row');
-      row.createDiv({ text: note.notePath, cls: 'va-cache-note-path' });
+      const pathEl = row.createDiv({ cls: 'va-cache-note-path' });
+      pathEl.createDiv({ text: note.notePath, cls: 'va-cache-note-name' });
+      pathEl.createDiv({ text: ownerLabel(note.owner), cls: 'va-cache-note-owner' });
       row.createDiv({
         text: `${formatBytes(note.bytes)} · ${note.entries} · ${new Date(note.updatedAt).toLocaleString()}`,
         cls: 'va-cache-note-meta',
@@ -168,10 +197,11 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
       const btn = row.createDiv('va-cache-clear-btn');
       btn.setText(t('settings.cache-clear-note'));
       btn.addEventListener('click', async () => {
-        if (!window.confirm(t('settings.cache-confirm-note', { note: note.notePath }))) return;
-        const n = await storage.removeNote(note.notePath);
+        const label = `${note.notePath} · ${ownerLabel(note.owner)}`;
+        if (!window.confirm(t('settings.cache-confirm-note', { note: label }))) return;
+        const n = await storage.removeNote(note.notePath, note.owner);
         new Notice(t('settings.cache-cleared', { n }));
-        void this.renderCacheData(statsEl, listEl, container);
+        void this.renderCacheData(container);
       });
     }
 

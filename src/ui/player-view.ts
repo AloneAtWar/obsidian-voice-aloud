@@ -11,7 +11,13 @@ export interface PlayerPanelHost {
   togglePointRead(): Promise<void>;
   isFollowReadActive(): boolean;
   toggleFollowRead(): Promise<void>;
-  activeVoiceLabel(): string;
+  /** 账号/音色选择（不做全局绑定，面板上每次可选，类似 obsidian-voice）。 */
+  accountOptions(): { id: string; label: string }[];
+  currentAccountId(): string | null;
+  setCurrentAccount(id: string | null): Promise<void>;
+  currentVoice(): string;
+  setCurrentVoice(voice: string): Promise<void>;
+  voicesForCurrentAccount(): Promise<string[]>;
   saveSettings(): Promise<void>;
 }
 
@@ -48,6 +54,9 @@ export class PlayerPanelView extends ItemView {
   private speedUpBtn!: HTMLButtonElement;
   private speedValueEl!: HTMLElement;
   private statusEl!: HTMLElement;
+  private accountSelect!: HTMLSelectElement;
+  private voiceSelect!: HTMLSelectElement;
+  private voiceRowEl!: HTMLElement;
 
   private isScrubbing = false;
   private unsubState: (() => void) | null = null;
@@ -225,6 +234,54 @@ export class PlayerPanelView extends ItemView {
 
     // 状态行（预生成进度等）
     this.statusEl = root.createDiv('va-player-status');
+
+    // 账号 / 音色选择行（不做全局绑定，每次可选；参考 obsidian-voice 的 options row）
+    const options = root.createDiv('va-player-options');
+    this.accountSelect = options.createEl('select', 'va-player-select');
+    this.accountSelect.ariaLabel = t('player.account');
+    this.accountSelect.addEventListener('change', async () => {
+      const v = this.accountSelect.value;
+      await this.host.setCurrentAccount(v || null);
+      await this.renderOptions();
+      this.onState();
+    });
+
+    this.voiceRowEl = options.createDiv('va-player-voice-row');
+    this.voiceSelect = this.voiceRowEl.createEl('select', 'va-player-select');
+    this.voiceSelect.ariaLabel = t('player.voice');
+    this.voiceSelect.addEventListener('change', async () => {
+      await this.host.setCurrentVoice(this.voiceSelect.value);
+      this.onState();
+    });
+
+    void this.renderOptions();
+  }
+
+  /** 重建账号/音色下拉（音色列表来自供应商，异步加载）。 */
+  private async renderOptions(): Promise<void> {
+    const accounts = this.host.accountOptions();
+    const currentId = this.host.currentAccountId();
+    this.accountSelect.empty();
+    for (const a of accounts) {
+      this.accountSelect.createEl('option', { value: a.id, text: a.label });
+    }
+    this.accountSelect.value = currentId ?? '';
+
+    const voices = await this.host.voicesForCurrentAccount();
+    const currentVoice = this.host.currentVoice();
+    if (voices.length) {
+      this.voiceRowEl.show();
+      this.voiceSelect.empty();
+      for (const v of voices) {
+        this.voiceSelect.createEl('option', { value: v, text: v });
+      }
+      if (currentVoice && !voices.includes(currentVoice)) {
+        this.voiceSelect.createEl('option', { value: currentVoice, text: currentVoice });
+      }
+      this.voiceSelect.value = currentVoice;
+    } else {
+      this.voiceRowEl.hide();
+    }
   }
 
   private transportBtn(
@@ -294,10 +351,18 @@ export class PlayerPanelView extends ItemView {
       setIcon(this.playBtn, s.paused ? 'play' : 'pause');
     }
 
-    // 副标题：句数 · 当前音色
-    this.headerSubtitleEl.setText(
-      s.total ? t('player.subtitle', { total: s.total, voice: this.host.activeVoiceLabel() }) : '',
-    );
+    // 副标题：句数 · 当前账号（· 音色）
+    if (s.total) {
+      const id = this.host.currentAccountId();
+      const label =
+        this.host.accountOptions().find((a) => a.id === id)?.label ?? t('player.system-voice');
+      const voice = this.host.currentVoice();
+      this.headerSubtitleEl.setText(
+        voice ? t('player.subtitle', { total: s.total, voice: `${label} · ${voice}` }) : label,
+      );
+    } else {
+      this.headerSubtitleEl.setText('');
+    }
 
     // 当前句展示
     const u = this.player.currentUnit();

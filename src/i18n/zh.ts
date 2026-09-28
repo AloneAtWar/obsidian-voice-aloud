@@ -28,6 +28,9 @@ export const zh: Record<string, string> = {
   'player.subtitle': '{total} 句 · {voice}',
   'player.locate': '点击定位正文中的当前句',
   'player.rate': '语速',
+  'player.account': '账号',
+  'player.voice': '音色',
+  'player.system-voice': '系统语音（离线）',
   'player.prev': '上一句',
   'player.next': '下一句',
   'player.play-pause': '播放/暂停',
@@ -49,16 +52,13 @@ export const zh: Record<string, string> = {
   'command.follow-read': '跟读模式（切换）',
 
   // ===== 设置 =====
-  'settings.current-voice': '当前语音',
-  'settings.current-voice-desc': '所有朗读与预生成使用当前选中的语音',
-  'settings.voice-system': '系统语音（Web Speech，离线保底）',
   'settings.rate': '朗读语速',
   'settings.rate-desc': '音频变速（1 为原速）',
   'settings.skip-back': '回退秒数',
   'settings.skip-back-desc': '「回退」按钮/命令回退的秒数（1–60）',
   'settings.accounts': '语音服务账号',
   'settings.accounts-desc':
-    '添加并配置 TTS 供应商实例（OpenAI 兼容端点、Qwen3-TTS、MiMo 等），添加后可在「当前语音」中选用。',
+    '添加并配置 TTS 供应商实例（OpenAI 兼容端点、Qwen3-TTS、MiMo 等）。账号与音色在播放器面板上按次选择，不做全局绑定。',
   'settings.add-account': '添加账号',
   'settings.edit': '编辑',
   'settings.delete': '删除',
@@ -66,6 +66,10 @@ export const zh: Record<string, string> = {
 
   // ===== 缓存管理 =====
   'settings.cache': '音频缓存',
+  'settings.cache-desc':
+    '缓存按 账号+音色等合成参数 分开存储；可按配置过滤，清理某篇笔记在某个配置下的缓存。',
+  'settings.cache-config-filter': '配置',
+  'settings.cache-all-configs': '全部配置',
   'settings.cache-stats': '共 {entries} 条，占用 {size}',
   'settings.cache-refresh': '刷新',
   'settings.cache-clear-note': '清理',

@@ -49,9 +49,36 @@ export default class VoiceAloudPlugin extends Plugin {
         // 命令路径也刷新面板按钮状态
         this.player.notifyExternal();
       },
-      activeVoiceLabel: () => {
+      accountOptions: () => [
+        { id: '', label: t('player.system-voice') },
+        ...this.settings.accounts.map((a) => ({
+          id: a.id,
+          label: a.name || a.id,
+        })),
+      ],
+      currentAccountId: () => this.settings.activeAccountId,
+      setCurrentAccount: async (id) => {
+        this.settings.activeAccountId = id;
+        await this.saveSettings();
+        this.player.notifyExternal();
+      },
+      currentVoice: () => resolveActive(this.settings).account?.voice ?? '',
+      setCurrentVoice: async (voice) => {
+        const id = this.settings.activeAccountId;
+        if (id && voice) {
+          this.settings.voiceByAccount[id] = voice;
+          await this.saveSettings();
+          this.player.notifyExternal();
+        }
+      },
+      voicesForCurrentAccount: async () => {
         const { provider, account } = resolveActive(this.settings);
-        return account?.name || provider.name;
+        if (!account) return [];
+        try {
+          return await provider.listVoices(account);
+        } catch {
+          return [];
+        }
       },
       saveSettings: () => this.saveSettings(),
     };

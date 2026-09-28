@@ -192,6 +192,19 @@ describe('registry & accounts', () => {
     expect(r.account?.id).toBe('a1');
   });
 
+  it('面板选择的音色覆盖账号默认音色', () => {
+    const acc = account({ id: 'a1', providerId: 'qwen3-tts', voice: 'Serena' });
+    const s = {
+      ...DEFAULT_SETTINGS,
+      activeAccountId: 'a1',
+      accounts: [acc],
+      voiceByAccount: { a1: 'Vivian' },
+    };
+    expect(resolveActive(s).account?.voice).toBe('Vivian');
+    const s2 = { ...DEFAULT_SETTINGS, activeAccountId: 'a1', accounts: [acc] };
+    expect(resolveActive(s2).account?.voice).toBe('Serena');
+  });
+
   it('newAccount 应用供应商默认值', () => {
     const acc = newAccount('qwen3-tts', { name: '本地' });
     expect(acc.baseUrl).toBe('http://127.0.0.1:8765');
