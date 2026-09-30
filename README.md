@@ -26,6 +26,18 @@
 
 添加本仓库地址到 [BRAT](https://github.com/TfTHacker/obsidian42-brat) 即可安装并跟踪测试版。
 
+## English
+
+Voice Aloud is a text-to-speech plugin that reads your notes aloud sentence by sentence. Click any sentence in reading view to start continuous playback from that point, with the current sentence highlighted as it reads. Playback is gapless thanks to prefetching and a per-sentence hash cache.
+
+- **Point-read mode**: one command toggles click-to-read in reading view; switch back to editing or close the note to exit instantly.
+- **Player panel**: play/pause/stop, previous/next sentence, configurable seek-back, speed 0.75x–3x, current-sentence display, and full-note pregeneration with progress.
+- **Multiple TTS providers and accounts**: OpenAI-compatible endpoints (including self-hosted), a dedicated Qwen3-TTS adapter, Xiaomi MiMo TTS, and the built-in system voice as an offline fallback.
+- **Sentence-level cache** (IndexedDB): cache keys cover account, provider, model, voice, language and text, so edited sentences are re-synthesized only.
+- Works on desktop and mobile, with lock-screen controls via Media Session.
+
+Install: download `main.js`, `manifest.json` and `styles.css` from [Releases](https://github.com/AloneAtWar/obsidian-voice-aloud/releases) into `.obsidian/plugins/voice-aloud/`, or add this repository to [BRAT](https://github.com/TfTHacker/obsidian42-brat).
+
 ## 开发
 
 ```bash

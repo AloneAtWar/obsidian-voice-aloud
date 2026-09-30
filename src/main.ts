@@ -211,7 +211,7 @@ export default class VoiceAloudPlugin extends Plugin {
       leaf = workspace.getRightLeaf(false);
       if (leaf) await leaf.setViewState({ type: VIEW_TYPE_VOICE_ALOUD, active: true });
     }
-    if (leaf) workspace.revealLeaf(leaf);
+    if (leaf) await workspace.revealLeaf(leaf);
   }
 
   refreshPlayerViews(): void {

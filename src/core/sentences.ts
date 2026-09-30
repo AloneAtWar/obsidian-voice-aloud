@@ -36,7 +36,9 @@ export function splitParagraphExact(text: string): string[] {
     }
     buf = '';
   };
-  for (const seg of text.split(/(?<=[。！？!?；;])/)) {
+  // 不用 lookbehind（iOS < 16.4 的 Safari 不支持），用逐段匹配得到同样的切分
+  for (const m of text.matchAll(/[^。！？!?；;]*[。！？!?；;]|[^。！？!?；;]+/g)) {
+    const seg = m[0];
     buf += seg;
     if (/[。！？!?；;]\s*$/.test(seg)) {
       push();

@@ -1,6 +1,6 @@
 {
   "name": "obsidian-voice-aloud",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Voice Aloud — 逐句朗读 Obsidian 笔记：点击句子从该句开始连读，多 TTS 供应商账号体系，预取 + 哈希缓存无缝衔接，桌面与移动端可用",
   "main": "main.js",
   "type": "module",
