@@ -1,8 +1,7 @@
 import { Notice } from 'obsidian';
 import { t } from '../i18n';
 import type { ResolvedVoice } from './accounts';
-import { audioCacheKey, canonicalExtra } from './cache/key';
-import type { AudioStorage } from './cache/storage';
+import type { Synthesizer } from './synth-service';
 import {
   bindMediaSession,
   clearMediaSession,
@@ -17,13 +16,10 @@ export interface PlayerState {
   loading: boolean;
   currentIdx: number;
   total: number;
-  pregenActive: boolean;
-  pregenDone: number;
-  pregenTotal: number;
 }
 
 export interface PlayerDeps {
-  storage: AudioStorage;
+  synth: Synthesizer;
   getVoice(): ResolvedVoice;
   getRate(): number;
   getSkipBackSeconds(): number;
@@ -56,7 +52,7 @@ export function computeSeekBack(
   return { idx: 0, offsetSec: 0 };
 }
 
-/** 播放状态机：句级连读、预取、回退、预生成；gen 计数器作废过期的异步结果。 */
+/** 播放状态机：句级连读、预取、回退；gen 计数器作废过期的异步结果。整篇预生成由队列模块负责。 */
 export class Player {
   private units: ReadingUnit[] = [];
   private idIndex = new Map<string, number>();
@@ -71,9 +67,6 @@ export class Player {
   private durations = new Map<number, number>();
   private pendingSeek: number | null = null;
   private noteTitle = '';
-  private pregenFlag = false;
-  private pregenDone = 0;
-  private pregenTotal = 0;
 
   private stateListeners = new Set<(s: PlayerState) => void>();
   private currentListeners = new Set<(id: string | null) => void>();
@@ -125,9 +118,6 @@ export class Player {
       loading: this.loadingFlag,
       currentIdx: this.curIdx,
       total: this.units.length,
-      pregenActive: this.pregenFlag,
-      pregenDone: this.pregenDone,
-      pregenTotal: this.pregenTotal,
     };
   }
 
@@ -261,51 +251,6 @@ export class Player {
     if (this.audio) this.audio.playbackRate = r;
   }
 
-  /** 整篇预生成：逐句合成落缓存；进行中再次调用 = 停止。已缓存的句子自动跳过。 */
-  async pregenerateAll(): Promise<void> {
-    if (this.pregenFlag) {
-      this.pregenFlag = false;
-      return;
-    }
-    const { provider } = this.deps.getVoice();
-    if (!provider.capabilities.pregeneratable) {
-      new Notice(t('player.pregen-not-needed'));
-      return;
-    }
-    if (!this.units.length) {
-      new Notice(t('player.pregen-nothing'));
-      return;
-    }
-    this.pregenFlag = true;
-    this.pregenDone = 0;
-    this.pregenTotal = this.units.length;
-    this.emit();
-    let failed = 0;
-    for (const u of this.units) {
-      if (!this.pregenFlag) break;
-      try {
-        await this.getUrl(u.text);
-      } catch {
-        failed++;
-      }
-      this.pregenDone++;
-      this.emit();
-    }
-    const cancelled = !this.pregenFlag;
-    this.pregenFlag = false;
-    this.emit();
-    if (cancelled) {
-      new Notice(t('player.pregen-cancelled', { done: this.pregenDone, total: this.pregenTotal }));
-    } else {
-      new Notice(
-        t('player.pregen-done', {
-          total: this.pregenTotal,
-          failed: failed ? t('player.pregen-done-failed', { failed }) : '',
-        }),
-      );
-    }
-  }
-
   /** 释放资源（插件卸载）。 */
   dispose(): void {
     this.stop();
@@ -353,55 +298,23 @@ export class Player {
     return this.audio;
   }
 
-  /** 取一句音频的 objectURL：内存 → 缓存 → 合成（并落缓存）。 */
+  /** 取一句音频的 objectURL：内存 → 共享合成服务（缓存查询 + 合成落缓存，in-flight 去重）。 */
   private async getUrl(text: string): Promise<string> {
     const { provider, account } = this.deps.getVoice();
     if (!provider.capabilities.cacheable || !account) {
       throw new Error('当前引擎不支持音频缓存');
     }
-    const key = await audioCacheKey({
-      accountId: account.id,
-      providerId: provider.id,
-      model: account.model,
+    const r = await this.deps.synth.synthesize({
+      account,
       voice: account.voice,
-      language: account.language,
-      extra: canonicalExtra(account.extra),
       text,
+      notePath: this.deps.getNotePath(),
     });
-    const hit = this.urlCache.get(key);
+    const hit = this.urlCache.get(r.key);
     if (hit) return hit;
-    const cached = await this.deps.storage.get(key);
-    const blob = cached?.blob ?? (await this.synthesizeAndStore(provider, account, text, key));
-    const url = URL.createObjectURL(blob);
-    this.urlCache.set(key, url);
+    const url = URL.createObjectURL(r.blob);
+    this.urlCache.set(r.key, url);
     return url;
-  }
-
-  private async synthesizeAndStore(
-    provider: NonNullable<ResolvedVoice['provider']>,
-    account: NonNullable<ResolvedVoice['account']>,
-    text: string,
-    key: string,
-  ): Promise<Blob> {
-    const result = await provider.synthesize(account, {
-      text,
-      voice: account.voice,
-      language: account.language,
-    });
-    const blob = new Blob([result.data], { type: result.mime });
-    const notePath = this.deps.getNotePath();
-    if (notePath) {
-      try {
-        await this.deps.storage.put(key, blob, result.mime, notePath, {
-          accountId: account.id,
-          accountName: account.name || account.id,
-          voice: account.voice,
-        });
-      } catch {
-        /* 缓存写失败不影响播放 */
-      }
-    }
-    return blob;
   }
 
   private async playIndex(i: number, myGen: number): Promise<void> {

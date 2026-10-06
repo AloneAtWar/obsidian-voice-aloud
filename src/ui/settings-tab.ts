@@ -10,6 +10,8 @@ export interface SettingsTabHost {
   saveSettings(): Promise<void>;
   storage: AudioStorage;
   refreshPlayerViews(): void;
+  /** 账号增删改后通知队列（账号不存在 → 任务过期）。 */
+  onAccountsChanged(): void;
 }
 
 function formatBytes(bytes: number): string {
@@ -37,6 +39,7 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     this.renderPlaybackSection(containerEl);
+    this.renderQueueSection(containerEl);
     this.renderAccountsSection(containerEl);
     this.renderCacheSection(containerEl.createDiv());
   }
@@ -66,6 +69,66 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
       );
   }
 
+  /** 预生成队列：本地 TTS 总并发、播放协调、自动继续、通知。 */
+  private renderQueueSection(root: HTMLElement): void {
+    new Setting(root).setName(t('settings.queue')).setDesc(t('settings.queue-desc')).setHeading();
+
+    const localValueEl = root.createDiv('va-setting-hint');
+    const syncLocalValue = () => {
+      localValueEl.setText(
+        t('settings.queue-local-total-value', { n: this.host.settings.localTtsTotalConcurrency }),
+      );
+    };
+    syncLocalValue();
+    new Setting(root)
+      .setName(t('settings.queue-local-total'))
+      .setDesc(t('settings.queue-local-total-desc'))
+      .addSlider((s) =>
+        s
+          .setLimits(1, 8, 1)
+          .setValue(this.host.settings.localTtsTotalConcurrency)
+          .onChange(async (v) => {
+            this.host.settings.localTtsTotalConcurrency = v;
+            syncLocalValue();
+            await this.host.saveSettings();
+          }),
+      );
+
+    new Setting(root)
+      .setName(t('settings.queue-playback-behavior'))
+      .setDesc(t('settings.queue-playback-behavior-desc'))
+      .addDropdown((d) =>
+        d
+          .addOption('yield', t('settings.queue-playback-yield'))
+          .addOption('pause', t('settings.queue-playback-pause'))
+          .setValue(this.host.settings.playbackQueueBehavior)
+          .onChange(async (v) => {
+            this.host.settings.playbackQueueBehavior = v as 'yield' | 'pause';
+            await this.host.saveSettings();
+          }),
+      );
+
+    new Setting(root)
+      .setName(t('settings.queue-auto-resume'))
+      .setDesc(t('settings.queue-auto-resume-desc'))
+      .addToggle((tg) =>
+        tg.setValue(this.host.settings.autoResumeQueue).onChange(async (v) => {
+          this.host.settings.autoResumeQueue = v;
+          await this.host.saveSettings();
+        }),
+      );
+
+    new Setting(root)
+      .setName(t('settings.queue-notify'))
+      .setDesc(t('settings.queue-notify-desc'))
+      .addToggle((tg) =>
+        tg.setValue(this.host.settings.queueNotify).onChange(async (v) => {
+          this.host.settings.queueNotify = v;
+          await this.host.saveSettings();
+        }),
+      );
+  }
+
   private renderAccountsSection(root: HTMLElement): void {
     new Setting(root)
       .setName(t('settings.accounts'))
@@ -89,6 +152,7 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
               if (idx >= 0) this.host.settings.accounts[idx] = saved;
               await this.host.saveSettings();
               this.host.refreshPlayerViews();
+              this.host.onAccountsChanged();
               this.display();
             }).open();
           }),
@@ -105,6 +169,7 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
             delete this.host.settings.voiceByAccount[acc.id];
             await this.host.saveSettings();
             this.host.refreshPlayerViews();
+            this.host.onAccountsChanged();
             this.display();
           }),
         );
@@ -119,6 +184,7 @@ export class VoiceAloudSettingTab extends PluginSettingTab {
             this.host.settings.accounts.push(saved);
             await this.host.saveSettings();
             this.host.refreshPlayerViews();
+            this.host.onAccountsChanged();
             this.display();
           }).open();
         }),

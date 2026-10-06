@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, WorkspaceLeaf, debounce } from 'obsidian';
+import { Notice, Plugin, TFile, TFolder, WorkspaceLeaf, debounce } from 'obsidian';
 import { DEFAULT_SETTINGS, resolveActive, type VoiceAloudSettings } from './core/accounts';
 import {
   NoteHighlighter,
@@ -6,34 +6,81 @@ import {
   wrapAllReadingViews,
 } from './core/annotation';
 import { IndexedDbAudioStorage } from './core/cache/indexeddb';
-import { Player } from './core/player';
 import { PointReadMode } from './core/point-read';
+import { PregenQueue, type QueuePersistData } from './core/pregen-queue';
+import { Player } from './core/player';
+import { getProvider } from './core/providers/registry';
+import { SynthService } from './core/synth-service';
 import { buildUnits, UnitIndex } from './core/sentences';
+import { randomId } from './util/hash';
 import { t } from './i18n';
 import { PlayerPanelView, VIEW_TYPE_VOICE_ALOUD, type PlayerPanelHost } from './ui/player-view';
+import { PregenQueueView, VIEW_TYPE_VOICE_ALOUD_QUEUE } from './ui/queue-view';
 import { VoiceAloudSettingTab } from './ui/settings-tab';
+
+/** data.json 顶层形态：设置字段 + 队列持久化（pregenQueue）。 */
+type PersistedData = VoiceAloudSettings & { pregenQueue?: QueuePersistData };
 
 export default class VoiceAloudPlugin extends Plugin {
   override settings: VoiceAloudSettings = DEFAULT_SETTINGS;
   storage = new IndexedDbAudioStorage();
+  synth = new SynthService(this.storage);
   player!: Player;
+  queue!: PregenQueue;
   pointRead!: PointReadMode;
   highlighter = new NoteHighlighter();
   private unitIndex: UnitIndex | null = null;
   private activeFile: TFile | null = null;
   private panelHost!: PlayerPanelHost;
+  private queueWasRunning = false;
+  private wasPlaybackActive = false;
+  private persistQueueDebounced = debounce(
+    () => void this.saveData(this.buildPersistedData()),
+    800,
+    true,
+  );
 
   override async onload(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const raw = (await this.loadData()) as PersistedData | null;
+    const { pregenQueue: queueData, ...settingsRaw } = raw ?? {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, settingsRaw);
 
     this.player = new Player({
-      storage: this.storage,
+      synth: this.synth,
       getVoice: () => resolveActive(this.settings),
       getRate: () => this.settings.rate,
       getSkipBackSeconds: () => this.settings.skipBackSeconds,
       getNotePath: () => this.activeFile?.path ?? null,
       getNoteTitle: () => this.activeFile?.basename ?? '',
     });
+
+    this.queue = new PregenQueue({
+      storage: this.storage,
+      synth: this.synth,
+      getAccount: (id) => this.settings.accounts.find((a) => a.id === id),
+      canPregenerate: (account) =>
+        getProvider(account.providerId)?.capabilities.pregeneratable === true,
+      readNote: async (path) => {
+        const f = this.app.vault.getAbstractFileByPath(path);
+        if (!(f instanceof TFile)) return null;
+        try {
+          return await this.app.vault.cachedRead(f);
+        } catch {
+          return null;
+        }
+      },
+      getConcurrencySettings: () => ({
+        localTtsTotal: this.settings.localTtsTotalConcurrency,
+        playbackBehavior: this.settings.playbackQueueBehavior,
+      }),
+      isPlaybackActive: () => this.player.isPlaying(),
+      notify: (message) => {
+        if (this.settings.queueNotify) new Notice(message);
+      },
+      persist: () => this.persistQueueDebounced(),
+      newId: () => randomId('task'),
+    });
+    this.queueWasRunning = this.queue.restore(queueData);
 
     this.panelHost = {
       settings: this.settings,
@@ -81,6 +128,8 @@ export default class VoiceAloudPlugin extends Plugin {
         }
       },
       saveSettings: () => this.saveSettings(),
+      enqueueCurrentNote: () => this.enqueueActiveNote(),
+      openQueueView: () => void this.activateQueueView(),
     };
 
     this.pointRead = new PointReadMode(this, {
@@ -94,6 +143,15 @@ export default class VoiceAloudPlugin extends Plugin {
       VIEW_TYPE_VOICE_ALOUD,
       (leaf: WorkspaceLeaf) => new PlayerPanelView(leaf, this.player, this.panelHost),
     );
+    this.registerView(VIEW_TYPE_VOICE_ALOUD_QUEUE, (leaf: WorkspaceLeaf) => {
+      return new PregenQueueView(leaf, this.queue, {
+        openNote: (path) => {
+          const f = this.app.vault.getAbstractFileByPath(path);
+          if (f instanceof TFile) void this.app.workspace.getLeaf(false).openFile(f);
+        },
+        confirm: (message) => window.confirm(message),
+      });
+    });
 
     this.addRibbonIcon('headphones', 'Voice Aloud', () => void this.activateView());
 
@@ -101,6 +159,16 @@ export default class VoiceAloudPlugin extends Plugin {
       id: 'open-panel',
       name: t('command.open-panel'),
       callback: () => void this.activateView(),
+    });
+    this.addCommand({
+      id: 'open-queue',
+      name: t('command.open-queue'),
+      callback: () => void this.activateQueueView(),
+    });
+    this.addCommand({
+      id: 'enqueue-current',
+      name: t('command.enqueue-current'),
+      callback: () => void this.enqueueActiveNote(),
     });
     this.addCommand({
       id: 'toggle-play',
@@ -142,6 +210,40 @@ export default class VoiceAloudPlugin extends Plugin {
     // 正文（阅读视图）句子标注 + 播放高亮（跟读模式开启时随读滚动）
     registerAnnotationPostProcessor(this, () => this.unitIndex);
     this.player.onCurrent((id) => this.highlighter.setActive(id, this.settings.followRead));
+    // 播放启停 → 通知队列（'pause' 行为下恢复派发；'yield' 下无影响）
+    this.player.onState(() => {
+      const active = this.player.isPlaying();
+      if (active !== this.wasPlaybackActive) {
+        this.wasPlaybackActive = active;
+        this.queue.notifyPlaybackChanged();
+      }
+    });
+
+    // 文件/文件夹右键 → 加入预生成队列
+    this.registerEvent(
+      this.app.workspace.on('file-menu', (menu, file) => {
+        if (file instanceof TFile && file.extension === 'md') {
+          menu.addItem((item) =>
+            item
+              .setTitle(t('queue.file-menu'))
+              .setIcon('audio-waveform')
+              .onClick(() => void this.enqueueFiles([file])),
+          );
+        } else if (file instanceof TFolder) {
+          menu.addItem((item) =>
+            item
+              .setTitle(t('queue.folder-menu'))
+              .setIcon('audio-waveform')
+              .onClick(() => {
+                const prefix = file.path === '/' ? '' : `${file.path}/`;
+                void this.enqueueFiles(
+                  this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(prefix)),
+                );
+              }),
+          );
+        }
+      }),
+    );
 
     // 点读模式下的点击朗读（事件委托；样式由 body.va-point-read 控制）
     this.registerDomEvent(document, 'click', (ev: MouseEvent) => {
@@ -179,11 +281,12 @@ export default class VoiceAloudPlugin extends Plugin {
     );
     this.registerEvent(this.app.metadataCache.on('changed', reloadChanged));
 
-    // 笔记改名/删除 → 维护音频缓存的归属
+    // 笔记改名/删除 → 维护音频缓存与队列任务的归属
     this.registerEvent(
       this.app.vault.on('rename', (file, oldPath) => {
         if (file instanceof TFile && file.extension === 'md') {
           void this.storage.renameNote(oldPath, file.path);
+          this.queue.renameNote(oldPath, file.path, file.basename);
         }
       }),
     );
@@ -191,12 +294,14 @@ export default class VoiceAloudPlugin extends Plugin {
       this.app.vault.on('delete', (file) => {
         if (file instanceof TFile && file.extension === 'md') {
           void this.storage.removeNote(file.path);
+          this.queue.removeNote(file.path);
         }
       }),
     );
 
     this.app.workspace.onLayoutReady(() => {
       void this.reloadActive(this.app.workspace.getActiveFile());
+      if (this.queueWasRunning && this.settings.autoResumeQueue) this.queue.start();
     });
   }
 
@@ -212,6 +317,67 @@ export default class VoiceAloudPlugin extends Plugin {
       if (leaf) await leaf.setViewState({ type: VIEW_TYPE_VOICE_ALOUD, active: true });
     }
     if (leaf) await workspace.revealLeaf(leaf);
+  }
+
+  async activateQueueView(): Promise<void> {
+    const { workspace } = this.app;
+    let leaf: WorkspaceLeaf | null =
+      workspace.getLeavesOfType(VIEW_TYPE_VOICE_ALOUD_QUEUE)[0] || null;
+    if (!leaf) {
+      leaf = workspace.getRightLeaf(false);
+      if (leaf) await leaf.setViewState({ type: VIEW_TYPE_VOICE_ALOUD_QUEUE, active: true });
+    }
+    if (leaf) await workspace.revealLeaf(leaf);
+  }
+
+  /** 把当前笔记加入预生成队列（面板按钮 / 命令）。 */
+  async enqueueActiveNote(): Promise<void> {
+    const file = this.activeFile;
+    if (!file || file.extension !== 'md') {
+      new Notice(t('queue.no-note'));
+      return;
+    }
+    await this.enqueueFiles([file]);
+  }
+
+  /** 批量入队：身份 = 笔记 + 当前账号 + 当前面板音色（入队时快照）。 */
+  async enqueueFiles(files: TFile[]): Promise<void> {
+    const { provider, account } = resolveActive(this.settings);
+    if (!account) {
+      new Notice(t('queue.no-account'));
+      return;
+    }
+    if (!provider.capabilities.pregeneratable) {
+      new Notice(t('queue.not-pregeneratable'));
+      return;
+    }
+    if (!files.length) {
+      new Notice(t('queue.no-note'));
+      return;
+    }
+    let added = 0;
+    let dup = 0;
+    for (const f of files) {
+      const r = this.queue.enqueue(
+        { path: f.path, title: f.basename },
+        account.id,
+        account.voice,
+        account.name || account.id,
+      );
+      if (r === 'added') added++;
+      else dup++;
+    }
+    if (added === 1 && dup === 0) {
+      new Notice(t('queue.enqueued', { note: files[0].basename }));
+    } else if (added === 0) {
+      new Notice(t('queue.enqueue-duplicate', { note: files[0].basename }));
+    } else {
+      new Notice(t('queue.enqueue-batch', { n: added, skipped: dup }));
+    }
+  }
+
+  onAccountsChanged(): void {
+    this.queue.onAccountsChanged();
   }
 
   refreshPlayerViews(): void {
@@ -296,16 +462,24 @@ export default class VoiceAloudPlugin extends Plugin {
     }
   }
 
+  private buildPersistedData(): PersistedData {
+    return { ...this.settings, pregenQueue: this.queue.persistData() };
+  }
+
   async saveSettings(): Promise<void> {
-    await this.saveData(this.settings);
+    await this.saveData(this.buildPersistedData());
   }
 
   override onunload(): void {
+    this.queue.dispose();
+    this.persistQueueDebounced.cancel();
+    void this.saveData(this.buildPersistedData());
     this.player.dispose();
     this.pointRead.exit();
     this.storage.close();
     // 卸载时移除面板叶子：否则插件重载后残留旧视图实例（闭包指向旧 settings），
     // 面板上的账号/音色切换会写进旧对象、播放器读不到
     this.app.workspace.getLeavesOfType(VIEW_TYPE_VOICE_ALOUD).forEach((l) => l.detach());
+    this.app.workspace.getLeavesOfType(VIEW_TYPE_VOICE_ALOUD_QUEUE).forEach((l) => l.detach());
   }
 }

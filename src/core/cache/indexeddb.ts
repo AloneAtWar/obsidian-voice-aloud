@@ -98,6 +98,16 @@ export class IndexedDbAudioStorage implements AudioStorage {
     return { blob: rec.blob, mime: rec.mime };
   }
 
+  async hasMany(keys: string[]): Promise<Set<string>> {
+    if (!keys.length) return new Set();
+    const wanted = new Set(keys);
+    const found = new Set<string>();
+    await cursorWalk((rec) => {
+      if (rec && wanted.has(rec.key)) found.add(rec.key);
+    });
+    return found;
+  }
+
   async put(
     key: string,
     blob: Blob,

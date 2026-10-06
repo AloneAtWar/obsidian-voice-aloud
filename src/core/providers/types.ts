@@ -34,6 +34,10 @@ export interface TtsAccountConfig {
   language: string;
   /** 供应商私有选项，如 MiMo 的风格指令 */
   extra?: Record<string, string>;
+  /** 预生成队列：该账号的最大并发合成请求数（1–8，缺省 1）。 */
+  maxConcurrency?: number;
+  /** 预生成队列：本地 TTS 标记；所有本地账号共享「本地 TTS 总并发」全局上限。 */
+  isLocalTts?: boolean;
 }
 
 export interface HttpRequest {

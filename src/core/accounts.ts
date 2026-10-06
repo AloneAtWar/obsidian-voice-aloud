@@ -12,6 +12,14 @@ export interface VoiceAloudSettings {
   skipBackSeconds: number;
   /** 跟读模式：开启后正文自动滚动跟随当前朗读句（默认开，保留原有体验）。 */
   followRead: boolean;
+  /** 预生成队列：所有本地 TTS 账号共享的在途请求总数上限。 */
+  localTtsTotalConcurrency: number;
+  /** 预生成队列：播放时的队列行为。yield = 即时合成优先、队列不暂停（默认）；pause = 播放期间挂起队列。 */
+  playbackQueueBehavior: 'yield' | 'pause';
+  /** 预生成队列：Obsidian 启动后自动继续上次未完成的队列。 */
+  autoResumeQueue: boolean;
+  /** 预生成队列：任务完成/失败时弹 Notice。 */
+  queueNotify: boolean;
 }
 
 export const DEFAULT_SETTINGS: VoiceAloudSettings = {
@@ -21,6 +29,10 @@ export const DEFAULT_SETTINGS: VoiceAloudSettings = {
   rate: 1,
   skipBackSeconds: 15,
   followRead: true,
+  localTtsTotalConcurrency: 1,
+  playbackQueueBehavior: 'yield',
+  autoResumeQueue: true,
+  queueNotify: true,
 };
 
 export interface ResolvedVoice {

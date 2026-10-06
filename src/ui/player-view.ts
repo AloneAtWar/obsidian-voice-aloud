@@ -19,6 +19,10 @@ export interface PlayerPanelHost {
   setCurrentVoice(voice: string): Promise<void>;
   voicesForCurrentAccount(): Promise<string[]>;
   saveSettings(): Promise<void>;
+  /** 把当前笔记加入预生成队列并启动（面板「预生成」按钮）。 */
+  enqueueCurrentNote(): Promise<void>;
+  /** 打开预生成队列视图。 */
+  openQueueView(): void;
 }
 
 const RATES = [0.75, 1, 1.25, 1.5, 2, 2.5, 3];
@@ -49,7 +53,6 @@ export class PlayerPanelView extends ItemView {
   private forwardBtn!: HTMLButtonElement;
   private pointReadBtn!: HTMLButtonElement;
   private followReadBtn!: HTMLButtonElement;
-  private pregenBtn!: HTMLButtonElement;
   private speedDownBtn!: HTMLButtonElement;
   private speedUpBtn!: HTMLButtonElement;
   private speedValueEl!: HTMLElement;
@@ -197,7 +200,7 @@ export class PlayerPanelView extends ItemView {
       'va-player-track',
     );
 
-    // 次级控制：点读 | 跟读 | 预生成（进行中显示百分比，再点停止）| 语速 -/+
+    // 次级控制：点读 | 跟读 | 预生成（入队并开始）| 队列 | 语速 -/+
     const secondary = root.createDiv('va-player-secondary');
 
     this.pointReadBtn = secondary.createEl('button', 'va-player-toggle');
@@ -216,10 +219,15 @@ export class PlayerPanelView extends ItemView {
       this.onState();
     });
 
-    this.pregenBtn = secondary.createEl('button', 'va-player-pregen');
-    setIcon(this.pregenBtn, 'audio-waveform');
-    this.pregenBtn.ariaLabel = t('player.pregen');
-    this.pregenBtn.addEventListener('click', () => void this.player.pregenerateAll());
+    const pregenBtn = secondary.createEl('button', 'va-player-pregen');
+    setIcon(pregenBtn, 'audio-waveform');
+    pregenBtn.ariaLabel = t('player.pregen');
+    pregenBtn.addEventListener('click', () => void this.host.enqueueCurrentNote());
+
+    const queueBtn = secondary.createEl('button', 'va-player-toggle');
+    setIcon(queueBtn, 'list-todo');
+    queueBtn.ariaLabel = t('player.queue');
+    queueBtn.addEventListener('click', () => this.host.openQueueView());
 
     const speedGroup = secondary.createDiv('va-player-speed');
     this.speedDownBtn = speedGroup.createEl('button', 'va-player-speed-btn');
@@ -380,26 +388,10 @@ export class PlayerPanelView extends ItemView {
       this.nowPlayingTextEl.removeClass('is-live');
     }
 
-    // 状态行：预生成进度；闲置隐藏
-    const statusText = s.pregenActive
-      ? t('player.pregen-progress', { done: s.pregenDone, total: s.pregenTotal })
-      : s.total
-        ? ''
-        : t('player.no-content');
+    // 状态行：闲置隐藏
+    const statusText = s.total ? '' : t('player.no-content');
     this.statusEl.setText(statusText);
     this.statusEl.toggleClass('is-hidden', !statusText);
-
-    // 预生成按钮：进行中显示百分比（再点一次即停止），闲置显示波形图标
-    this.pregenBtn.empty();
-    if (s.pregenActive && s.pregenTotal > 0) {
-      this.pregenBtn.setText(`${Math.round((s.pregenDone / s.pregenTotal) * 100)}%`);
-      this.pregenBtn.addClass('is-active');
-      this.pregenBtn.ariaLabel = t('player.pregen-stop');
-    } else {
-      setIcon(this.pregenBtn, 'audio-waveform');
-      this.pregenBtn.removeClass('is-active');
-      this.pregenBtn.ariaLabel = t('player.pregen');
-    }
 
     // 点读/跟读开关状态
     this.pointReadBtn.toggleClass('is-active', this.host.isPointReadActive());

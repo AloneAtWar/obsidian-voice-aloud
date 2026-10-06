@@ -33,6 +33,8 @@ export interface CacheStats {
 
 export interface AudioStorage {
   get(key: string): Promise<CachedAudio | null>;
+  /** 批量查询已存在的 key（预生成队列计算任务进度用）。 */
+  hasMany(keys: string[]): Promise<Set<string>>;
   put(key: string, blob: Blob, mime: string, notePath: string, owner: CacheOwner): Promise<void>;
   clearAll(): Promise<void>;
   stats(): Promise<CacheStats>;

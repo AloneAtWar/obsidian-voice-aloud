@@ -128,6 +128,30 @@ export class AccountModal extends Modal {
       });
     });
 
+    // 预生成队列：并发与本地 TTS 标记
+    new Setting(body)
+      .setName(t('account.max-concurrency'))
+      .setDesc(t('account.max-concurrency-desc'))
+      .addText((txt) => {
+        txt.inputEl.type = 'number';
+        txt.inputEl.min = '1';
+        txt.inputEl.max = '8';
+        txt.setValue(String(this.account.maxConcurrency ?? 1));
+        txt.onChange((v) => {
+          const n = Math.min(8, Math.max(1, Math.floor(Number(v) || 1)));
+          this.account.maxConcurrency = n;
+        });
+      });
+
+    new Setting(body)
+      .setName(t('account.local-tts'))
+      .setDesc(t('account.local-tts-desc'))
+      .addToggle((tg) =>
+        tg.setValue(!!this.account.isLocalTts).onChange((v) => {
+          this.account.isLocalTts = v;
+        }),
+      );
+
     if (provider?.id === 'mimo') {
       new Setting(body)
         .setName(t('account.style'))

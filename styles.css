@@ -446,3 +446,240 @@
   background: var(--background-modifier-hover);
   color: var(--text-normal);
 }
+
+/* ===== 预生成队列视图 ===== */
+
+.va-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+/* 控制区 */
+.va-queue-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.va-queue-state {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-small);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.va-queue-state.is-running {
+  color: var(--color-green);
+}
+
+.va-queue-state.is-failure {
+  color: var(--color-red);
+}
+
+.va-queue-buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.va-queue-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  color: var(--text-muted);
+  /* 重置原生 button 样式 */
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  box-shadow: none;
+  appearance: none;
+}
+
+.va-queue-icon-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.va-queue-icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* 总进度 */
+.va-queue-overall {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.va-queue-overall-bar {
+  height: 5px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+
+.va-queue-overall-fill {
+  height: 100%;
+  width: 0;
+  background: var(--interactive-accent);
+  border-radius: inherit;
+  transition: width 0.25s ease;
+}
+
+.va-queue-overall-text {
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.va-queue-meta {
+  font-size: var(--font-smallest);
+  color: var(--text-faint);
+}
+
+/* 任务列表 */
+.va-queue-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.va-queue-empty {
+  padding: 24px 8px;
+  font-size: var(--font-small);
+  color: var(--text-faint);
+  text-align: center;
+  white-space: pre-line;
+  line-height: 1.8;
+}
+
+.va-queue-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.va-queue-row:last-child {
+  border-bottom: none;
+}
+
+.va-queue-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.va-queue-note {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-small);
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.va-queue-note:hover {
+  color: var(--text-accent);
+}
+
+.va-queue-row.is-expired .va-queue-note,
+.va-queue-row.is-cancelled .va-queue-note {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.va-queue-status {
+  flex: 0 0 auto;
+  font-size: var(--font-smallest);
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+}
+
+.va-queue-status.is-running {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+}
+
+.va-queue-status.is-done {
+  color: var(--color-green);
+}
+
+.va-queue-status.is-partial {
+  color: var(--color-orange);
+}
+
+.va-queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+/* 行进度 */
+.va-queue-row-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.va-queue-config {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--font-smallest);
+  color: var(--text-accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.va-queue-row-bar {
+  flex: 1 1 40px;
+  height: 3px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+
+.va-queue-row-fill {
+  height: 100%;
+  width: 0;
+  background: var(--text-accent);
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.va-queue-row.is-partial .va-queue-row-fill {
+  background: var(--color-orange);
+}
+
+.va-queue-row-count {
+  flex: 0 0 auto;
+  font-size: var(--font-smallest);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.va-queue-error {
+  font-size: var(--font-smallest);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
