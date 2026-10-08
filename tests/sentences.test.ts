@@ -51,6 +51,14 @@ describe('cleanInlineMarkdown', () => {
     expect(cleanInlineMarkdown('- 项目一')).toBe('项目一');
     expect(cleanInlineMarkdown('12. 项目十二')).toBe('项目十二');
   });
+
+  it('任务列表项连勾选框语法一起剥（渲染后的 checkbox 不含文本）', () => {
+    expect(cleanInlineMarkdown('- [ ] 待办一')).toBe('待办一');
+    expect(cleanInlineMarkdown('- [x] 已完成')).toBe('已完成');
+    expect(cleanInlineMarkdown('1. [ ] 有序待办')).toBe('有序待办');
+    // 无列表前缀的普通段落保持原样，仍能与渲染文本对齐
+    expect(cleanInlineMarkdown('[ ] 不是任务列表')).toBe('[ ] 不是任务列表');
+  });
 });
 
 describe('canonText', () => {

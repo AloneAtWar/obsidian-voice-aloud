@@ -3,7 +3,7 @@ import { splitParagraphExact, type ReadingUnit, type UnitIndex } from './sentenc
 
 /**
  * 正文句子标注（阅读视图）：
- * - 段落按句包成 <span class="va-sent" data-va=id>（与 TTS 断句共用 splitParagraphExact）
+ * - 段落与列表项按句包成 <span class="va-sent" data-va=id>（与 TTS 断句共用 splitParagraphExact）
  * - 尽量保留内联格式（加粗/斜体/链接）；跨句的内联元素外壳会被拆开（仅丢失该处格式）
  * - 点击朗读由 main.ts 的事件委托处理（点读模式开启时）
  * - 播放高亮由 NoteHighlighter.setActive 切换 .va-active
@@ -43,10 +43,10 @@ export function registerAnnotationPostProcessor(
   getIndex: () => UnitIndex | null,
 ): void {
   plugin.registerMarkdownPostProcessor((el: HTMLElement, _ctx: MarkdownPostProcessorContext) => {
-    // Obsidian 逐块调用后处理器：el 本身常常就是 <p>/<h2>…，必须把它自己也算进候选
+    // Obsidian 逐块调用后处理器：el 本身常常就是 <p>/<h2>/<li>…，必须把它自己也算进候选
     const targets: HTMLElement[] = [];
-    if (/^(P|H[1-6])$/.test(el.tagName)) targets.push(el);
-    for (const node of Array.from(el.querySelectorAll('p, h1, h2, h3, h4, h5, h6'))) {
+    if (/^(P|H[1-6]|LI)$/.test(el.tagName)) targets.push(el);
+    for (const node of Array.from(el.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li'))) {
       targets.push(node as HTMLElement);
     }
     for (const t of targets) {
@@ -63,7 +63,7 @@ export function registerAnnotationPostProcessor(
 export function wrapAllReadingViews(getIndex: () => UnitIndex | null): number {
   let count = 0;
   for (const container of Array.from(document.querySelectorAll('.markdown-preview-view'))) {
-    for (const node of Array.from(container.querySelectorAll('p, h1, h2, h3, h4, h5, h6'))) {
+    for (const node of Array.from(container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li'))) {
       const t = node as HTMLElement;
       if (t.hasClass('va-done')) continue;
       try {
@@ -78,11 +78,36 @@ export function wrapAllReadingViews(getIndex: () => UnitIndex | null): number {
   return count;
 }
 
+/**
+ * li 的这些直接子元素不参与断句，原位保留：
+ * 嵌套列表、宽松列表的 <p>（会作为独立目标处理）、任务列表 checkbox、Obsidian 内部结构（如 list-bullet）。
+ */
+const LI_SKIP_TAGS = new Set([
+  'UL',
+  'OL',
+  'P',
+  'DIV',
+  'BLOCKQUOTE',
+  'TABLE',
+  'PRE',
+  'DL',
+  'HR',
+  'FIGURE',
+  'INPUT',
+]);
+
 function wrapParagraph(p: HTMLElement, getIndex: () => UnitIndex | null): void {
   if (p.hasClass('va-done')) return;
   const index = getIndex();
   if (!index) return;
-  const text = p.textContent || '';
+  const isListItem = p.tagName === 'LI';
+  const childNodes = Array.from(p.childNodes);
+  const joinSentence = (n: Node): boolean =>
+    !isListItem || n.nodeType !== 1 || !LI_SKIP_TAGS.has((n as HTMLElement).tagName);
+  const text = childNodes
+    .filter(joinSentence)
+    .map((n) => n.textContent || '')
+    .join('');
   if (!text.trim()) return;
   const pieces = splitParagraphExact(text);
   if (!pieces.length) return;
@@ -111,7 +136,7 @@ function wrapParagraph(p: HTMLElement, getIndex: () => UnitIndex | null): void {
 
   const walk = (node: Node): void => {
     if (si >= pieces.length) {
-      span.appendChild(node.cloneNode(true));
+      span.appendChild(node);
       return;
     }
     if (node.nodeType === 3) {
@@ -135,11 +160,11 @@ function wrapParagraph(p: HTMLElement, getIndex: () => UnitIndex | null): void {
       if (t.length > 0) span.appendChild(document.createTextNode(t));
       return;
     }
-    // 元素节点：整体落进当前句且不跨句界 → 原样保留（保住加粗/链接）
+    // 元素节点：整体落进当前句且不跨句界 → 原样保留（保住加粗/链接及原生事件）
     const elLen = (node.textContent || '').length;
     if (offset + elLen <= pieces[si].length - 0.0001 || offset + elLen === pieces[si].length) {
       offset += elLen;
-      span.appendChild(node.cloneNode(true));
+      span.appendChild(node);
       if (offset >= pieces[si].length && pieces[si].length > 0) {
         finishSentence();
         offset = 0;
@@ -150,7 +175,10 @@ function wrapParagraph(p: HTMLElement, getIndex: () => UnitIndex | null): void {
     for (const child of Array.from(node.childNodes)) walk(child);
   };
 
-  for (const child of Array.from(p.childNodes)) walk(child);
+  for (const child of childNodes) {
+    if (joinSentence(child)) walk(child);
+    else frag.appendChild(child);
+  }
   // 收尾：补最后未闭合的 span（无句界标点的段落尾）
   if (si < pieces.length || span.textContent !== null) {
     if (span.childNodes.length > 0 || si < pieces.length) frag.appendChild(span);

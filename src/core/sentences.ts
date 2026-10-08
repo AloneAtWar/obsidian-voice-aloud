@@ -55,17 +55,21 @@ export function splitParagraphExact(text: string): string[] {
   return out;
 }
 
-/** 与渲染后文本对齐：去 wikilink/markdown 链接外壳、加粗与斜体标记、列表前缀。 */
+/** 与渲染后文本对齐：去 wikilink/markdown 链接外壳、加粗与斜体标记、列表前缀与任务勾选框。 */
 export function cleanInlineMarkdown(line: string): string {
-  return line
-    .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, a: string, b?: string) =>
-      b !== undefined ? b : a,
-    )
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/\*\*([^*]*)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/^\s*[-*+]\s+/, '')
-    .replace(/^\s*\d+[.、]\s+/, '');
+  return (
+    line
+      .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, a: string, b?: string) =>
+        b !== undefined ? b : a,
+      )
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\*\*([^*]*)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      // 任务列表项：列表前缀连同勾选框语法一起去掉（渲染后的 checkbox 元素不含文本，留着就对不上）
+      .replace(/^\s*(?:[-*+]|\d+[.、])\s+\[[ xX]\]\s+/, '')
+      .replace(/^\s*[-*+]\s+/, '')
+      .replace(/^\s*\d+[.、]\s+/, '')
+  );
 }
 
 /** 构建朗读单元序列（整篇笔记；标题也作为单元朗读，跳过表格/代码/引用）。 */
