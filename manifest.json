@@ -1,7 +1,7 @@
 {
   "id": "voice-aloud",
   "name": "Voice Aloud",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minAppVersion": "1.7.2",
   "description": "逐句朗读笔记：点击句子从该句开始连读，多 TTS 供应商账号，预取 + 哈希缓存无缝衔接，桌面与移动端可用。Read notes aloud sentence by sentence with multi-provider TTS, prefetching and hash-based caching.",
   "author": "AloneAtWar",
