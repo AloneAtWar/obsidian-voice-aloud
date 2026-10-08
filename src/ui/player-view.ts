@@ -224,11 +224,6 @@ export class PlayerPanelView extends ItemView {
     pregenBtn.ariaLabel = t('player.pregen');
     pregenBtn.addEventListener('click', () => void this.host.enqueueCurrentNote());
 
-    const queueBtn = secondary.createEl('button', 'va-player-toggle');
-    setIcon(queueBtn, 'list-todo');
-    queueBtn.ariaLabel = t('player.queue');
-    queueBtn.addEventListener('click', () => this.host.openQueueView());
-
     const speedGroup = secondary.createDiv('va-player-speed');
     this.speedDownBtn = speedGroup.createEl('button', 'va-player-speed-btn');
     setIcon(this.speedDownBtn, 'minus');
