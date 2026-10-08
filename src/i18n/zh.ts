@@ -6,6 +6,8 @@ export const zh: Record<string, string> = {
   'player.no-content': '当前笔记没有可朗读内容',
   'player.synthesizing': '合成中',
   'player.pregen': '加入预生成队列并开始',
+  'player.pregen-queued': '已加入预生成队列，等待生成 · 点击查看队列',
+  'player.pregen-progress': '预生成中 {done}/{total}（{pct}%）· 点击查看队列',
   'player.follow-read': '跟读模式',
   'player.follow-read-on': '已开启跟读模式：正文自动滚动跟随当前朗读句',
   'player.follow-read-off': '已关闭跟读模式：仅高亮，不滚动',

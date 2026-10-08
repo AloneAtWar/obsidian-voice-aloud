@@ -23,6 +23,8 @@ export interface PlayerPanelHost {
   enqueueCurrentNote(): Promise<void>;
   /** 打开预生成队列视图。 */
   openQueueView(): void;
+  /** 当前笔记在预生成队列中的进行中任务（等待/生成中）；null = 未入队列。 */
+  notePregenProgress(): { status: 'waiting' | 'running'; done: number; total: number } | null;
 }
 
 const RATES = [0.75, 1, 1.25, 1.5, 2, 2.5, 3];
@@ -53,6 +55,8 @@ export class PlayerPanelView extends ItemView {
   private forwardBtn!: HTMLButtonElement;
   private pointReadBtn!: HTMLButtonElement;
   private followReadBtn!: HTMLButtonElement;
+  private pregenBtn!: HTMLButtonElement;
+  private pregenPctEl: HTMLElement | null = null;
   private speedDownBtn!: HTMLButtonElement;
   private speedUpBtn!: HTMLButtonElement;
   private speedValueEl!: HTMLElement;
@@ -91,10 +95,11 @@ export class PlayerPanelView extends ItemView {
     this.buildDom();
     this.unsubState = this.player.onState(() => this.onState());
     this.unsubCurrent = this.player.onCurrent(() => this.onState());
-    // 250ms 轮询进度条（拖动中让位给用户）
+    // 250ms 轮询进度条（拖动中让位给用户）与预生成按钮进度
     this.registerInterval(
       window.setInterval(() => {
         if (!this.isScrubbing) this.updateSeek();
+        this.updatePregen();
       }, 250),
     );
     this.onState();
@@ -200,7 +205,7 @@ export class PlayerPanelView extends ItemView {
       'va-player-track',
     );
 
-    // 次级控制：点读 | 跟读 | 预生成（入队并开始）| 队列 | 语速 -/+
+    // 次级控制：点读 | 跟读 | 预生成（入队并开始；已入队时按钮显示进度，点击查看队列）| 语速 -/+
     const secondary = root.createDiv('va-player-secondary');
 
     this.pointReadBtn = secondary.createEl('button', 'va-player-toggle');
@@ -219,10 +224,13 @@ export class PlayerPanelView extends ItemView {
       this.onState();
     });
 
-    const pregenBtn = secondary.createEl('button', 'va-player-pregen');
-    setIcon(pregenBtn, 'audio-waveform');
-    pregenBtn.ariaLabel = t('player.pregen');
-    pregenBtn.addEventListener('click', () => void this.host.enqueueCurrentNote());
+    this.pregenBtn = secondary.createEl('button', 'va-player-pregen');
+    setIcon(this.pregenBtn, 'audio-waveform');
+    this.pregenBtn.ariaLabel = t('player.pregen');
+    this.pregenBtn.addEventListener('click', () => {
+      if (this.host.notePregenProgress()) this.host.openQueueView();
+      else void this.host.enqueueCurrentNote();
+    });
 
     const speedGroup = secondary.createDiv('va-player-speed');
     this.speedDownBtn = speedGroup.createEl('button', 'va-player-speed-btn');
@@ -395,6 +403,35 @@ export class PlayerPanelView extends ItemView {
     // 语速显示
     this.speedValueEl.setText(`${this.host.settings.rate}x`);
 
+    this.updatePregen();
     this.updateSeek();
+  }
+
+  /**
+   * 预生成按钮三态：未入队（波形图标）| 等待中（波形脉冲，总句数未知）|
+   * 生成中（百分比数字）。仅内容变化时重建 DOM，避免 250ms 轮询反复重绘。
+   */
+  private updatePregen(): void {
+    const p = this.host.notePregenProgress();
+    const pct = p && p.total > 0 ? Math.round((p.done / p.total) * 100) : null;
+    const mode: 'idle' | 'wait' | 'run' = !p ? 'idle' : pct === null ? 'wait' : 'run';
+    if (this.pregenBtn.dataset.mode !== mode) {
+      this.pregenBtn.dataset.mode = mode;
+      this.pregenBtn.empty();
+      this.pregenPctEl = null;
+      if (mode === 'run') this.pregenPctEl = this.pregenBtn.createSpan('va-player-pregen-pct');
+      else setIcon(this.pregenBtn, 'audio-waveform');
+    }
+    if (this.pregenPctEl && pct !== null) {
+      const text = `${pct}%`;
+      if (this.pregenPctEl.getText() !== text) this.pregenPctEl.setText(text);
+    }
+    this.pregenBtn.toggleClass('is-active', !!p);
+    this.pregenBtn.toggleClass('is-waiting', mode === 'wait');
+    this.pregenBtn.ariaLabel = !p
+      ? t('player.pregen')
+      : pct === null
+        ? t('player.pregen-queued')
+        : t('player.pregen-progress', { done: p.done, total: p.total, pct });
   }
 }

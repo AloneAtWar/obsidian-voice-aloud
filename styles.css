@@ -263,6 +263,27 @@
   height: 16px;
 }
 
+/* 预生成按钮：已入队等待中（总句数未知）→ 波形脉冲 */
+.va-player-pregen.is-waiting svg {
+  animation: va-pregen-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes va-pregen-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* 预生成按钮：生成中 → 显示百分比 */
+.va-player-pregen-pct {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 /* 语速组 */
 .va-player-speed {
   display: flex;

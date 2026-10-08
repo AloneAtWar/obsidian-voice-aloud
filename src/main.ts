@@ -130,6 +130,22 @@ export default class VoiceAloudPlugin extends Plugin {
       saveSettings: () => this.saveSettings(),
       enqueueCurrentNote: () => this.enqueueActiveNote(),
       openQueueView: () => void this.activateQueueView(),
+      notePregenProgress: () => {
+        const file = this.activeFile;
+        const { account } = resolveActive(this.settings);
+        if (!file || !account) return null;
+        // 与 enqueue 的任务身份对齐：笔记 + 账号 + 当前面板音色
+        const task = this.queue
+          .snapshot()
+          .tasks.find(
+            (task) =>
+              task.notePath === file.path &&
+              task.accountId === account.id &&
+              task.voice === account.voice,
+          );
+        if (!task || (task.status !== 'waiting' && task.status !== 'running')) return null;
+        return { status: task.status, done: task.done, total: task.total };
+      },
     };
 
     this.pointRead = new PointReadMode(this, {
