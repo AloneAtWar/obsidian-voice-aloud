@@ -75,7 +75,7 @@ describe('stripFrontmatter', () => {
 });
 
 describe('buildUnits', () => {
-  it('标题与正文都成为单元，跳过表格/代码/引用/嵌入', async () => {
+  it('标题与正文都成为单元，跳过表格/代码/嵌入；引用剥前缀成为单元', async () => {
     const md = [
       '---',
       'k: v',
@@ -99,10 +99,39 @@ describe('buildUnits', () => {
     ].join('\n');
     const units = await buildUnits(md);
     const texts = units.map((u) => u.text);
-    expect(texts).toEqual(['标题一', '第一句。', '第二句。', '列表项一句。']);
+    expect(texts).toEqual(['标题一', '第一句。', '第二句。', '引用行', '列表项一句。']);
     expect(units[0].kind).toBe('heading');
     expect(units[1].kind).toBe('text');
     expect(units[1].heading).toBe('标题一');
+  });
+
+  it('引用：嵌套、callout 标记、引用内列表/标题', async () => {
+    const md = [
+      '> 普通引用句。',
+      '>> 嵌套引用句。',
+      '> [!warning]',
+      '> [!tip] 自定义标题',
+      '> - 引用内列表项。',
+      '> ## 引用内标题',
+      '> 正文跟随。',
+      '> ![[quote_embed]]',
+      '> | a | b |',
+    ].join('\n');
+    const texts = (await buildUnits(md)).map((u) => u.text);
+    expect(texts).toEqual([
+      '普通引用句。',
+      '嵌套引用句。',
+      '自定义标题',
+      '引用内列表项。',
+      '引用内标题',
+      '正文跟随。',
+    ]);
+  });
+
+  it('引用内的代码围栏整块跳过（围栏线带 > 前缀）', async () => {
+    const md = ['> ```', '> code inside quote', '> ```', '> 围栏后的引用句。'].join('\n');
+    const texts = (await buildUnits(md)).map((u) => u.text);
+    expect(texts).toEqual(['围栏后的引用句。']);
   });
 
   it('句子 id 稳定且随文本变化', async () => {

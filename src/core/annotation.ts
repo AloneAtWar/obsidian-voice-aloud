@@ -3,7 +3,8 @@ import { splitParagraphExact, type ReadingUnit, type UnitIndex } from './sentenc
 
 /**
  * 正文句子标注（阅读视图）：
- * - 段落与列表项按句包成 <span class="va-sent" data-va=id>（与 TTS 断句共用 splitParagraphExact）
+ * - 段落、列表项与 callout 标题按句包成 <span class="va-sent" data-va=id>（与 TTS 断句共用 splitParagraphExact）
+ * - 引用（含 callout）内部的 p/li 由下方选择器自然覆盖
  * - 尽量保留内联格式（加粗/斜体/链接）；跨句的内联元素外壳会被拆开（仅丢失该处格式）
  * - 点击朗读由 main.ts 的事件委托处理（点读模式开启时）
  * - 播放高亮由 NoteHighlighter.setActive 切换 .va-active
@@ -43,10 +44,13 @@ export function registerAnnotationPostProcessor(
   getIndex: () => UnitIndex | null,
 ): void {
   plugin.registerMarkdownPostProcessor((el: HTMLElement, _ctx: MarkdownPostProcessorContext) => {
-    // Obsidian 逐块调用后处理器：el 本身常常就是 <p>/<h2>/<li>…，必须把它自己也算进候选
+    // Obsidian 逐块调用后处理器：el 本身常常就是 <p>/<h2>/<li>…，必须把它自己也算进候选；
+    // callout 标题不是标题标签，靠类名补充候选
     const targets: HTMLElement[] = [];
-    if (/^(P|H[1-6]|LI)$/.test(el.tagName)) targets.push(el);
-    for (const node of Array.from(el.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li'))) {
+    if (/^(P|H[1-6]|LI)$/.test(el.tagName) || el.hasClass('callout-title-inner')) targets.push(el);
+    for (const node of Array.from(
+      el.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, .callout-title-inner'),
+    )) {
       targets.push(node as HTMLElement);
     }
     for (const t of targets) {
@@ -63,7 +67,9 @@ export function registerAnnotationPostProcessor(
 export function wrapAllReadingViews(getIndex: () => UnitIndex | null): number {
   let count = 0;
   for (const container of Array.from(document.querySelectorAll('.markdown-preview-view'))) {
-    for (const node of Array.from(container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li'))) {
+    for (const node of Array.from(
+      container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, .callout-title-inner'),
+    )) {
       const t = node as HTMLElement;
       if (t.hasClass('va-done')) continue;
       try {

@@ -72,7 +72,7 @@ export function cleanInlineMarkdown(line: string): string {
   );
 }
 
-/** 构建朗读单元序列（整篇笔记；标题也作为单元朗读，跳过表格/代码/引用）。 */
+/** 构建朗读单元序列（整篇笔记；标题也作为单元朗读，跳过表格/代码/嵌入；引用剥前缀照常朗读）。 */
 export async function buildUnits(md: string): Promise<ReadingUnit[]> {
   const body = stripFrontmatter(md);
   if (!body) return [];
@@ -81,13 +81,21 @@ export async function buildUnits(md: string): Promise<ReadingUnit[]> {
   let level = 2;
   let inFence = false;
   for (const rawLine of body.split('\n')) {
-    const line = rawLine.trim();
-    // 代码围栏：``` 打开/关闭，围栏内部整行跳过
-    if (line.startsWith('```')) {
-      inFence = !inFence;
+    const raw = rawLine.trim();
+    // 代码围栏内部整行跳过；开合围栏线都可能带 > 前缀（引用内围栏），故剥前缀后再判断
+    if (inFence) {
+      if (raw.replace(/^(?:\s*>)+\s*/, '').startsWith('```')) inFence = false;
       continue;
     }
-    if (inFence) continue;
+    let line = raw;
+    if (line.startsWith('>')) {
+      // 引用：剥掉 > 前缀（含嵌套）与 callout 类型标记，正文/自定义标题照常朗读
+      line = line.replace(/^(?:\s*>)+\s*/, '').replace(/^\[![^\]]*[-+]?\]\s*/, '');
+    }
+    if (line.startsWith('```')) {
+      inFence = true;
+      continue;
+    }
     const h = line.match(/^(#{1,6})\s+(.+?)\s*(?:%%t=[\d.]+%%)?\s*$/);
     if (h) {
       heading = h[2];
@@ -104,7 +112,7 @@ export async function buildUnits(md: string): Promise<ReadingUnit[]> {
       }
       continue;
     }
-    if (!line || line.startsWith('|') || line.startsWith('>') || line.startsWith('!')) {
+    if (!line || line.startsWith('|') || line.startsWith('!')) {
       continue;
     }
     const clean = cleanInlineMarkdown(line);
