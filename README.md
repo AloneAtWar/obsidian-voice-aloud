@@ -10,16 +10,39 @@
 - **多供应商账号体系**：供应商（系统适配器）与账号（你的实例配置）分离，可同时配置多个账号随时切换
   - OpenAI 兼容端点（`POST /v1/audio/speech`，支持自托管服务）
   - Qwen3-TTS 专属适配器（`/v1/audio/speech` + `/api/voices` 音色发现 + `/health` 健康检查 + 语言参数）
+  - Azure TTS（SSML 合成 + `voices/list` 音色发现 + 服务区域配置，输出 MP3；**中英混排自动按语言切分 `<lang>` 语言域**，中文音色念英文句时数字按英文读；输出码率可选 48 kHz/192 kbps、48 kHz/96 kbps、24 kHz/48 kbps）
   - Xiaomi MiMo TTS（chat-completions 形态，支持风格指令）
   - 系统 Web Speech（内置离线保底，无需配置）
-- **句子级哈希缓存**（IndexedDB）：缓存键包含账号/供应商/模型/音色/语言/句子文本，改句只重合成该句；设置页按笔记查看与清理缓存
+- **句子级哈希缓存**（IndexedDB）：缓存键包含账号/供应商/模型/音色/语言/区域/句子文本，改句只重合成该句；设置页按笔记查看与清理缓存；**播放面板底部可展开「当前文件缓存」，按音色复选清理**——换音色时只删旧音色的音频，其余保留
 - **正文高亮跟随**：TTS 断句与正文标注共用同一套切分逻辑，点击、缓存失效、编辑后续播精确对齐
+
+## Azure 音色清单
+
+Azure 一个订阅常有 900+ 个音色，全部塞进下拉框没法用。插件目录下的 `azure-voices.json` 决定播放面板显示哪些音色：
+
+```json
+{
+  "voices": [
+    { "id": "zh-CN-Xiaoxiao:DragonHDFlashLatestNeural", "name": "晓晓 最新神经语音" },
+    { "id": "en-US-AndrewMultilingualNeural" }
+  ]
+}
+```
+
+- **数组顺序就是下拉顺序**；`id` 必须是 Azure 的 Voice ShortName
+- `name` 可省略。中文音色建议写中文名；其他语言省略后按 ID 自动格式化（`en-US-AndrewMultilingualNeural` → `Andrew Multilingual Neural`）
+- 显示时统一加语言前缀：`zh~ 晓晓 多语言`、`en~ Ana Neural`、`ja~ Aoi Neural`
+- 也支持简写：`["zh-CN-XiaoxiaoNeural"]` 或 `{ "zh-CN-XiaoxiaoNeural": "晓晓" }`
+- 改完执行命令「重新加载 Azure 音色清单」即可生效，无需重启
+- 删掉该文件或把 `voices` 置空 → 回退为显示账号下全部音色
+
+仓库内的 `azure-voices.json` 是一份 26 条的精选中英日韩清单，可直接改。完整的四语种音色参考（含性别/地区/类型/状态）见 [`docs/azure-voices-4langs.md`](docs/azure-voices-4langs.md)。
 
 ## 安装
 
 ### 从 GitHub Releases
 
-1. 从 [Releases](https://github.com/AloneAtWar/obsidian-voice-aloud/releases) 下载 `main.js`、`manifest.json`、`styles.css`
+1. 从 [Releases](https://github.com/jemy204/obsidian-voice-aloud/releases) 下载 `main.js`、`manifest.json`、`styles.css`
 2. 放入 vault 的 `.obsidian/plugins/voice-aloud/` 目录
 3. 重启 Obsidian 并启用插件
 
@@ -35,10 +58,11 @@ Voice Aloud is a text-to-speech plugin that reads your notes aloud sentence by s
 - **Player panel**: play/pause/stop, previous/next sentence, configurable seek-back, speed 0.75x–3x, current-sentence display, and one-click enqueue for pregeneration.
 - **Pregeneration queue**: batch-synthesize notes in the background — enqueue via file/folder context menu or command, watch overall and per-note progress in a dedicated queue view, with start/pause/cancel/reorder/retry controls. The queue persists across restarts and resumes automatically; per-account concurrency caps plus a shared global cap for local-TTS accounts; playback always takes priority over queue work.
 - **Multiple TTS providers and accounts**: OpenAI-compatible endpoints (including self-hosted), a dedicated Qwen3-TTS adapter, Xiaomi MiMo TTS, and the built-in system voice as an offline fallback.
-- **Sentence-level cache** (IndexedDB): cache keys cover account, provider, model, voice, language and text, so edited sentences are re-synthesized only.
+- **Sentence-level cache** (IndexedDB): cache keys cover account, provider, model, voice, language and text, so edited sentences are re-synthesized only. The player panel exposes a collapsible per-note cache view with per-voice checkboxes, so switching voices only discards the old voice's audio.
+- **Azure voice catalog**: `azure-voices.json` in the plugin folder decides which voices appear in the player dropdown (optional `name` per entry, automatic language prefixes such as `en~`), with `docs/azure-voices-4langs.md` as a reference list.
 - Works on desktop and mobile, with lock-screen controls via Media Session.
 
-Install: download `main.js`, `manifest.json` and `styles.css` from [Releases](https://github.com/AloneAtWar/obsidian-voice-aloud/releases) into `.obsidian/plugins/voice-aloud/`, or add this repository to [BRAT](https://github.com/TfTHacker/obsidian42-brat).
+Install: download `main.js`, `manifest.json` and `styles.css` from [Releases](https://github.com/jemy204/obsidian-voice-aloud/releases) into `.obsidian/plugins/voice-aloud/`, or add this repository to [BRAT](https://github.com/TfTHacker/obsidian42-brat).
 
 ## 开发
 

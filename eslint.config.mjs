@@ -10,8 +10,8 @@ export default tseslint.config(
       'eslint.config.mjs',
       'esbuild.config.mjs',
       'vitest.config.ts',
-      // Node 运行的工具脚本，非插件代码
-      'deploy.mjs',
+      // Node 运行的工具脚本，非插件代码（deploy.local.mjs 是各人本地的部署脚本）
+      'deploy*.mjs',
       'scripts/',
     ],
   },

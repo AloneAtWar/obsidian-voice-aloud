@@ -40,6 +40,8 @@ export interface AudioStorage {
   stats(): Promise<CacheStats>;
   /** 按笔记 × 配置列出；owner 提供时仅统计该配置。 */
   listByNote(owner?: CacheOwner): Promise<NoteCacheInfo[]>;
+  /** 只统计某一篇笔记（播放面板每句播完后的刷新用，避免为无关笔记建表）。 */
+  listByNotePath(notePath: string): Promise<NoteCacheInfo[]>;
   /** 删除某篇笔记（在指定配置下）的全部缓存，返回删除条数。 */
   removeNote(notePath: string, owner?: CacheOwner): Promise<number>;
   renameNote(oldPath: string, newPath: string): Promise<void>;

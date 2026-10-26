@@ -20,6 +20,10 @@ export interface VoiceAloudSettings {
   autoResumeQueue: boolean;
   /** 预生成队列：任务完成/失败时弹 Notice。 */
   queueNotify: boolean;
+  /** 阅读代码：开启后朗读围栏代码块（一行一个朗读单元）；关闭时跳过（默认）。 */
+  readCodeBlocks: boolean;
+  /** 阅读表格：开启后逐格朗读表格内容（跳过分隔行）；关闭时跳过（默认）。 */
+  readTables: boolean;
 }
 
 export const DEFAULT_SETTINGS: VoiceAloudSettings = {
@@ -33,6 +37,8 @@ export const DEFAULT_SETTINGS: VoiceAloudSettings = {
   playbackQueueBehavior: 'yield',
   autoResumeQueue: true,
   queueNotify: true,
+  readCodeBlocks: false,
+  readTables: false,
 };
 
 export interface ResolvedVoice {

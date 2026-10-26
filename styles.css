@@ -704,3 +704,129 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* 播放面板底部：当前文件的音频缓存（默认折叠；换音色后清理用） */
+.va-player-cache {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.va-player-cache > summary.va-player-cache-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.va-player-cache > summary.va-player-cache-head::-webkit-details-marker {
+  display: none;
+}
+
+/* 自绘折叠指示箭头，避免各平台默认 marker 位置不一 */
+.va-player-cache > summary.va-player-cache-head::before {
+  content: '▸';
+  font-size: 9px;
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+
+.va-player-cache[open] > summary.va-player-cache-head::before {
+  content: '▾';
+}
+
+.va-player-cache > summary.va-player-cache-head:hover .va-player-cache-title {
+  color: var(--text-accent);
+}
+
+.va-player-cache-title {
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+}
+
+.va-player-cache-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.va-player-cache-metarow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.va-player-cache-meta {
+  font-size: var(--font-smallest);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.va-player-cache-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.va-player-cache-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--font-smallest);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.va-player-cache-item:hover {
+  color: var(--text-normal);
+}
+
+.va-player-cache-item input[type='checkbox'],
+.va-player-cache-all input[type='checkbox'] {
+  margin: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.va-player-cache-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-smallest);
+  color: var(--text-faint);
+  cursor: pointer;
+  user-select: none;
+}
+
+.va-player-cache-voice {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.va-player-cache-count {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.va-player-cache-clear {
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: var(--font-smallest);
+  padding: 2px 10px;
+}
+
+.va-player-cache-clear:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

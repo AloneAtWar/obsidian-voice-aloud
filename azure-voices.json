@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "note": "Azure 音色清单：播放面板的下拉只显示这里列出的音色，数组顺序即下拉顺序。id 必须是 Azure 的 Voice ShortName（在 Speech Studio 或 voices/list 接口里可查）。name 可省略：省略后插件把 ID 自动格式化成可读英文（en-US-AndrewMultilingualNeural → Andrew Multilingual Neural）；中文音色建议写中文名。无论是否写 name，显示时都会自动加语言前缀，形如 zh~ 晓晓 多语言 / en~ Andrew Multilingual Neural / ja~ Aoi Neural，因此 name 里不用自己写前缀。改完执行命令「重新加载 Azure 音色清单」或重载插件生效。删掉本文件或把 voices 置空，则回退为显示账号下全部音色。",
+  "voices": [
+    { "id": "zh-CN-Xiaoxiao:DragonHDFlashLatestNeural", "name": "晓晓 最新神经语音" },
+    { "id": "zh-CN-XiaoxiaoMultilingualNeural", "name": "晓晓 多语言" },
+    { "id": "zh-CN-Xiaochen:DragonHDFlashLatestNeural", "name": "晓辰 最新神经语音" },
+    { "id": "zh-CN-XiaochenMultilingualNeural", "name": "晓辰 多语言" },
+    { "id": "zh-CN-XiaohanNeural", "name": "晓涵" },
+    { "id": "zh-CN-Xiaoshuang:DragonHDFlashLatestNeural", "name": "晓双 最新神经语音" },
+    { "id": "zh-CN-Yunyi:DragonHDFlashLatestNeural", "name": "云逸 最新神经语音" },
+    { "id": "zh-CN-YunxiNeural", "name": "云希" },
+    { "id": "zh-CN-YunyangNeural", "name": "云扬" },
+    { "id": "zh-CN-YunxiaNeural", "name": "云夏" },
+    { "id": "zh-CN-sichuan-YunxiNeural", "name": "云希 四川" },
+    { "id": "en-US-Ava:DragonHDLatestNeural" },
+    { "id": "en-US-AvaMultilingualNeural" },
+    { "id": "en-US-AnaNeural" },
+    { "id": "en-US-Bree:DragonHDLatestNeural" },
+    { "id": "en-US-Andrew:DragonHDLatestNeural" },
+    { "id": "en-US-AndrewMultilingualNeural" },
+    { "id": "en-US-Brian:DragonHDLatestNeural" },
+    { "id": "en-US-AdamMultilingualNeural" },
+    { "id": "ja-JP-Nanami:DragonHDLatestNeural" },
+    { "id": "ja-JP-AoiNeural" },
+    { "id": "ja-JP-Masaru:DragonHDLatestNeural" },
+    { "id": "ko-KR-SunHi:DragonHDLatestNeural" },
+    { "id": "ko-KR-JiMinNeural" },
+    { "id": "ko-KR-Hyunsu:DragonHDLatestNeural" },
+    { "id": "ko-KR-BongJinNeural" }
+  ]
+}

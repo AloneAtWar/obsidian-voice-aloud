@@ -2,6 +2,7 @@ import { Notice, Plugin, TFile, TFolder, WorkspaceLeaf, debounce } from 'obsidia
 import { DEFAULT_SETTINGS, resolveActive, type VoiceAloudSettings } from './core/accounts';
 import {
   NoteHighlighter,
+  neighborTexts,
   registerAnnotationPostProcessor,
   wrapAllReadingViews,
 } from './core/annotation';
@@ -10,8 +11,14 @@ import { PointReadMode } from './core/point-read';
 import { PregenQueue, type QueuePersistData } from './core/pregen-queue';
 import { Player } from './core/player';
 import { getProvider } from './core/providers/registry';
+import {
+  AZURE_VOICE_CATALOG_FILE,
+  displayLabel,
+  parseVoiceCatalog,
+  type VoiceOption,
+} from './core/voice-catalog';
 import { SynthService } from './core/synth-service';
-import { buildUnits, UnitIndex } from './core/sentences';
+import { buildUnits, locateUnit, neighborUnitTexts, UnitIndex } from './core/sentences';
 import { randomId } from './util/hash';
 import { t } from './i18n';
 import { PlayerPanelView, VIEW_TYPE_VOICE_ALOUD, type PlayerPanelHost } from './ui/player-view';
@@ -30,6 +37,10 @@ export default class VoiceAloudPlugin extends Plugin {
   pointRead!: PointReadMode;
   highlighter = new NoteHighlighter();
   private unitIndex: UnitIndex | null = null;
+  /** 用户编辑的音色清单（插件目录 azure-voices.json）；null = 没配置，回退内置逻辑。 */
+  private voiceCatalog: VoiceOption[] | null = null;
+  /** 用户点击朗读的那一处 span（单元匹配时直接用它做高亮，避免上下文反推失准） */
+  private clickedHighlight: { unitIndex: number; el: HTMLElement } | null = null;
   private activeFile: TFile | null = null;
   private panelHost!: PlayerPanelHost;
   private queueWasRunning = false;
@@ -44,6 +55,7 @@ export default class VoiceAloudPlugin extends Plugin {
     const raw = (await this.loadData()) as PersistedData | null;
     const { pregenQueue: queueData, ...settingsRaw } = raw ?? {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, settingsRaw);
+    await this.loadVoiceCatalog();
 
     this.player = new Player({
       synth: this.synth,
@@ -69,6 +81,8 @@ export default class VoiceAloudPlugin extends Plugin {
           return null;
         }
       },
+      isReadCodeActive: () => this.settings.readCodeBlocks,
+      isReadTablesActive: () => this.settings.readTables,
       getConcurrencySettings: () => ({
         localTtsTotal: this.settings.localTtsTotalConcurrency,
         playbackBehavior: this.settings.playbackQueueBehavior,
@@ -96,6 +110,27 @@ export default class VoiceAloudPlugin extends Plugin {
         // 命令路径也刷新面板按钮状态
         this.player.notifyExternal();
       },
+      isReadCodeActive: () => this.settings.readCodeBlocks,
+      toggleReadCode: async () => {
+        this.settings.readCodeBlocks = !this.settings.readCodeBlocks;
+        await this.saveSettings();
+        new Notice(
+          this.settings.readCodeBlocks ? t('player.read-code-on') : t('player.read-code-off'),
+        );
+        this.player.notifyExternal();
+        // 句子集随开关变化：重新解析 + 重渲染标注（播放中按当前句续播）
+        await this.reloadActive(this.activeFile);
+      },
+      isReadTablesActive: () => this.settings.readTables,
+      toggleReadTables: async () => {
+        this.settings.readTables = !this.settings.readTables;
+        await this.saveSettings();
+        new Notice(
+          this.settings.readTables ? t('player.read-tables-on') : t('player.read-tables-off'),
+        );
+        this.player.notifyExternal();
+        await this.reloadActive(this.activeFile);
+      },
       accountOptions: () => [
         { id: '', label: t('player.system-voice') },
         ...this.settings.accounts.map((a) => ({
@@ -121,11 +156,28 @@ export default class VoiceAloudPlugin extends Plugin {
       voicesForCurrentAccount: async () => {
         const { provider, account } = resolveActive(this.settings);
         if (!account) return [];
+        // Azure：音色只从 azure-voices.json 读取（用户自己挑、自己命名）
+        if (account.providerId === 'azure-tts' && this.voiceCatalog) {
+          return this.voiceCatalog.map((v): VoiceOption => ({ id: v.id, label: v.label }));
+        }
         try {
-          return await provider.listVoices(account);
+          // 其他供应商（或清单文件缺失）：按 ID 生成显示名（同样带 `语言~` 前缀）
+          const ids = await provider.listVoices(account);
+          return ids.map((id): VoiceOption => ({ id, label: displayLabel(id) }));
         } catch {
           return [];
         }
+      },
+      noteCacheInfo: async () => {
+        const path = this.activeFile?.path;
+        if (!path) return [];
+        return this.storage.listByNotePath(path);
+      },
+      clearNoteCache: async (owner) => {
+        const path = this.activeFile?.path;
+        if (!path) return 0;
+        // 传 owner = 只清该账号·音色的缓存；不传 = 清该笔记全部
+        return this.storage.removeNote(path, owner);
       },
       saveSettings: () => this.saveSettings(),
       enqueueCurrentNote: () => this.enqueueActiveNote(),
@@ -201,6 +253,15 @@ export default class VoiceAloudPlugin extends Plugin {
     this.addCommand({ id: 'next', name: t('command.next'), callback: () => this.player.next() });
     this.addCommand({ id: 'prev', name: t('command.prev'), callback: () => this.player.prev() });
     this.addCommand({
+      id: 'reload-voice-catalog',
+      name: t('command.reload-voice-catalog'),
+      callback: async () => {
+        await this.loadVoiceCatalog();
+        this.player.notifyExternal();
+        new Notice(t('catalog.reloaded', { n: this.voiceCatalog?.length ?? 0 }));
+      },
+    });
+    this.addCommand({
       id: 'seek-back',
       name: t('command.seek-back', { n: this.settings.skipBackSeconds }),
       callback: () => this.player.seekBack(),
@@ -220,12 +281,27 @@ export default class VoiceAloudPlugin extends Plugin {
       name: t('command.follow-read'),
       callback: () => void this.panelHost.toggleFollowRead(),
     });
+    this.addCommand({
+      id: 'read-code',
+      name: t('command.read-code'),
+      callback: () => void this.panelHost.toggleReadCode(),
+    });
+    this.addCommand({
+      id: 'read-tables',
+      name: t('command.read-tables'),
+      callback: () => void this.panelHost.toggleReadTables(),
+    });
 
     this.addSettingTab(new VoiceAloudSettingTab(this.app, this));
 
     // 正文（阅读视图）句子标注 + 播放高亮（跟读模式开启时随读滚动）
-    registerAnnotationPostProcessor(this, () => this.unitIndex);
-    this.player.onCurrent((id) => this.highlighter.setActive(id, this.settings.followRead));
+    registerAnnotationPostProcessor(
+      this,
+      () => this.unitIndex,
+      () => this.settings.readCodeBlocks,
+      () => this.settings.readTables,
+    );
+    this.player.onCurrent(() => this.highlightCurrent());
     // 播放启停 → 通知队列（'pause' 行为下恢复派发；'yield' 下无影响）
     this.player.onState(() => {
       const active = this.player.isPlaying();
@@ -262,11 +338,57 @@ export default class VoiceAloudPlugin extends Plugin {
     );
 
     // 点读模式下的点击朗读（事件委托；样式由 body.va-point-read 控制）
+    // 重复文本按「上下文 + 文档序」定位：用前后内容块文本在单元序列中匹配，
+    // 点第 10 行的「朗读」就朗读第 10 行那句（不依赖所有 span 都在 DOM 里）
     this.registerDomEvent(document, 'click', (ev: MouseEvent) => {
       if (!this.pointRead.active) return;
       const target = ev.target as HTMLElement | null;
       const span = target?.closest?.('.va-sent') as HTMLElement | null;
-      if (span && span.dataset.va) this.player.playFromId(span.dataset.va);
+      if (span && span.dataset.va) {
+        const units = this.player.getUnits();
+        const scope = span.closest('.markdown-preview-view') ?? document;
+        const same = Array.from(scope.querySelectorAll(`.va-sent[data-va="${span.dataset.va}"]`));
+        const occ = same.indexOf(span);
+        // hint：occurrence 在同 id 单元中推出的下标（供平局时就近取舍）
+        let hint = -1;
+        let seen = -1;
+        for (let k = 0; k < units.length; k++) {
+          if (units[k].id === span.dataset.va) {
+            seen++;
+            if (seen === occ) {
+              hint = k;
+              break;
+            }
+          }
+        }
+        const nt = neighborTexts(span);
+        // 阅读代码关闭时行内代码（注音）不朗读，需从 span 文本里剔除后再做上下文匹配；
+        // 开启时注音属于朗读内容，必须保留——否则会匹配到同名但无注音的其它单元（如详细释义）
+        const keepCode = this.settings.readCodeBlocks;
+        const spanText = keepCode
+          ? (span.textContent ?? '')
+          : Array.from(span.childNodes)
+              .filter((n) => !(n.nodeType === 1 && (n as HTMLElement).tagName === 'CODE'))
+              .map((n) => n.textContent ?? '')
+              .join('');
+        const idx = locateUnit(
+          units,
+          {
+            text: spanText,
+            prevBlocks: nt.prevBlocks,
+            nextBlocks: nt.nextBlocks,
+          },
+          hint,
+        );
+        if (idx >= 0) {
+          // 记住被点击的 span：首次高亮直接用它（嵌套列表等结构里上下文反推可能失准）
+          this.clickedHighlight = { unitIndex: idx, el: span };
+          this.player.playFromIndex(idx);
+        } else {
+          this.clickedHighlight = null;
+          this.player.playFromId(span.dataset.va, occ >= 0 ? occ : 0);
+        }
+      }
     });
 
     this.registerEvent(
@@ -416,15 +538,21 @@ export default class VoiceAloudPlugin extends Plugin {
         md = null;
       }
     }
-    // 播放中刷新：按当前句 id 在新句子集中续播（句子未变则无缝继续）
-    const resumeId = this.player.getState().playing
-      ? (this.player.currentUnit()?.id ?? null)
-      : null;
-    const units = md !== null ? await buildUnits(md) : [];
+    // 播放中刷新：按当前句 (id, occurrence) 在新句子集中续播（句子未变则无缝继续）
+    const cur = this.player.getState().playing ? this.player.currentUnit() : null;
+    const resumeId = cur?.id ?? null;
+    const resumeOcc = cur?.occurrence ?? 0;
+    const units =
+      md !== null
+        ? await buildUnits(md, {
+            code: this.settings.readCodeBlocks,
+            tables: this.settings.readTables,
+          })
+        : [];
     this.unitIndex = new UnitIndex(units);
     this.player.setNote(units, { title: file?.basename ?? '', path: file?.path ?? null });
     if (resumeId) {
-      const idx = units.findIndex((u) => u.id === resumeId);
+      const idx = units.findIndex((u) => u.id === resumeId && u.occurrence === resumeOcc);
       if (idx >= 0) this.player.playFromIndex(idx);
     }
     this.refreshPlayerViews();
@@ -435,11 +563,37 @@ export default class VoiceAloudPlugin extends Plugin {
   }
 
   wrapPreviewSentences(): void {
-    const n = wrapAllReadingViews(() => this.unitIndex);
+    const n = wrapAllReadingViews(
+      () => this.unitIndex,
+      () => this.settings.readCodeBlocks,
+      () => this.settings.readTables,
+    );
     if (n > 0) console.log(`[voice-aloud] 已包装 ${n} 个段落`);
-    // 若当前正在播放，补一次当前句高亮
-    const cur = this.player.currentUnit();
-    if (cur) this.highlighter.setActive(cur.id, this.settings.followRead);
+    // 若当前正在播放，补一次当前句高亮（必须走统一入口，带上上下文与点击处，
+    // 否则这里会按 occurrence 兜底、把高亮打到靠前的那一处）
+    if (this.player.currentUnit()) this.highlightCurrent();
+  }
+
+  /** 高亮当前播放句的统一入口：上下文 + 点击处。 */
+  private highlightCurrent(): void {
+    const unit = this.player.currentUnit();
+    if (!unit) {
+      this.highlighter.setActive(null);
+      return;
+    }
+    const units = this.player.getUnits();
+    const i = units.indexOf(unit);
+    const ctx = i >= 0 ? neighborUnitTexts(units, i) : undefined;
+    const clicked = this.clickedHighlight;
+    const explicit = clicked && clicked.unitIndex === i ? clicked.el : null;
+    if (clicked && clicked.unitIndex !== i) this.clickedHighlight = null;
+    this.highlighter.setActive(
+      unit.id,
+      this.settings.followRead,
+      unit.occurrence,
+      ctx,
+      explicit,
+    );
   }
 
   /** 实机诊断：用当前账号合成一句，返回完整错误信息（含堆栈）。 */
@@ -484,6 +638,25 @@ export default class VoiceAloudPlugin extends Plugin {
 
   async saveSettings(): Promise<void> {
     await this.saveData(this.buildPersistedData());
+  }
+
+  /**
+   * 读取插件目录下的 azure-voices.json（用户可编辑的音色清单）。
+   * 文件不存在或格式无法识别 → 置空，播放面板回退到「按语言组过滤全部音色」。
+   */
+  private async loadVoiceCatalog(): Promise<void> {
+    this.voiceCatalog = null;
+    const dir = this.manifest.dir;
+    if (!dir) return;
+    const path = `${dir}/${AZURE_VOICE_CATALOG_FILE}`;
+    const adapter = this.app.vault.adapter;
+    try {
+      if (!(await adapter.exists(path))) return;
+      this.voiceCatalog = parseVoiceCatalog(JSON.parse(await adapter.read(path)));
+    } catch (e) {
+      console.warn('[voice-aloud] 音色清单读取失败：', e);
+      new Notice(t('catalog.load-failed'));
+    }
   }
 
   override onunload(): void {

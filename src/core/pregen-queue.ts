@@ -50,6 +50,10 @@ export interface PregenQueueDeps {
   canPregenerate(account: TtsAccountConfig): boolean;
   /** 读笔记原文；null = 笔记不存在。 */
   readNote(notePath: string): Promise<string | null>;
+  /** 阅读代码开关：开启时预生成也包含围栏代码块（与播放断句一致）。 */
+  isReadCodeActive(): boolean;
+  /** 阅读表格开关：开启时预生成也包含表格单元格（与播放断句一致）。 */
+  isReadTablesActive(): boolean;
   getConcurrencySettings(): {
     localTtsTotal: number;
     playbackBehavior: 'yield' | 'pause';
@@ -403,7 +407,10 @@ export class PregenQueue {
       return;
     }
     if (task.status !== 'waiting' || !this.runningFlag) return;
-    const units = await buildUnits(md);
+    const units = await buildUnits(md, {
+      code: this.deps.isReadCodeActive(),
+      tables: this.deps.isReadTablesActive(),
+    });
     if (task.status !== 'waiting' || !this.runningFlag) return;
     task.total = units.length;
     if (!units.length) {

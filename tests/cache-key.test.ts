@@ -62,4 +62,11 @@ describe('audioCacheKey', () => {
     const b = await audioCacheKey({ ...base, voice: 'a', language: 'bc' });
     expect(a).not.toBe(b);
   });
+
+  it('请求体版本：声明后键变，未声明时键与其他供应商保持一致', async () => {
+    const withRev = await audioCacheKey({ ...base, synthesisRevision: 'lang-spans-v1' });
+    const other = await audioCacheKey({ ...base, synthesisRevision: 'lang-spans-v2' });
+    expect(withRev).not.toBe(await audioCacheKey(base));
+    expect(withRev).not.toBe(other);
+  });
 });

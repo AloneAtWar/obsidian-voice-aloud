@@ -166,6 +166,28 @@ export class IndexedDbAudioStorage implements AudioStorage {
     return Array.from(byKey.values()).sort((a, b) => b.bytes - a.bytes);
   }
 
+  async listByNotePath(notePath: string): Promise<NoteCacheInfo[]> {
+    const byKey = new Map<string, NoteCacheInfo>();
+    await cursorWalk((rec) => {
+      // 先比路径：非本笔记的记录直接跳过，不做任何对象分配
+      if (!rec || typeof rec !== 'object' || rec.notePath !== notePath) return;
+      const recOwner = rec.owner ?? { accountId: '?', accountName: '?', voice: '?' };
+      const mapKey = `${recOwner.accountId}\u0000${recOwner.voice}`;
+      const cur = byKey.get(mapKey) ?? {
+        notePath,
+        owner: recOwner,
+        entries: 0,
+        bytes: 0,
+        updatedAt: 0,
+      };
+      cur.entries++;
+      cur.bytes += rec.bytes ?? rec.blob?.size ?? 0;
+      cur.updatedAt = Math.max(cur.updatedAt, rec.createdAt ?? 0);
+      byKey.set(mapKey, cur);
+    });
+    return Array.from(byKey.values()).sort((a, b) => b.bytes - a.bytes);
+  }
+
   async removeNote(notePath: string, owner?: CacheOwner): Promise<number> {
     let removed = 0;
     await cursorWalk((rec, store) => {
