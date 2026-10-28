@@ -2,6 +2,7 @@ import { ItemView, Notice, setIcon, type WorkspaceLeaf } from 'obsidian';
 import type { Player, PlayerState } from '../core/player';
 import type { VoiceOption } from '../core/voice-catalog';
 import type { CacheOwner, NoteCacheInfo } from '../core/cache/storage';
+import { sortCacheRows } from './cache-rows';
 import { formatBytes } from '../util/format';
 import { t } from '../i18n';
 
@@ -394,20 +395,27 @@ export class PlayerPanelView extends ItemView {
     return `${row.owner.accountId}\u0000${row.owner.voice}`;
   }
 
-  /** 渲染当前文件的缓存条目（按占用大小降序，一行一个 账号·音色，可勾选）。 */
+  /** 缓存行的音色显示名：来自音色清单，清单里没有（或还没加载完）时回退 ID。 */
+  private cacheLabel(row: NoteCacheInfo): string {
+    return this.voiceLabels.get(row.owner.voice) ?? row.owner.voice;
+  }
+
+  /** 渲染当前文件的缓存条目（按音色显示名升序，一行一个 账号·音色，可勾选）。 */
   private async renderNoteCache(): Promise<void> {
     if (!this.cacheSectionEl) return;
     // 折叠状态不需要数字：直接跳过 IndexedDB 遍历，展开时 toggle 会重新算
     if (!this.cacheSectionEl.open) return;
-    let rows: NoteCacheInfo[] = [];
-    try {
-      rows = await this.host.noteCacheInfo();
-    } catch {
-      rows = [];
-    }
+    // 按显示名排序（不是体积）：体积随播放增长，按体积排会让每次展开的顺序都在变
+    const rows = sortCacheRows(
+      await this.host.noteCacheInfo().catch(() => [] as NoteCacheInfo[]),
+      (r) => this.cacheLabel(r),
+    );
     if (!this.cacheSectionEl.isConnected) return;
     this.cacheRows = rows;
-    const sig = rows.map((r) => `${this.cacheRowKey(r)}:${r.entries}:${r.bytes}`).join('|');
+    // 指纹含显示名：清单改了名字也要重绘（名称与顺序都在变）
+    const sig = rows
+      .map((r) => `${this.cacheRowKey(r)}:${this.cacheLabel(r)}:${r.entries}:${r.bytes}`)
+      .join('|');
     if (sig === this.lastCacheSig && this.cacheListEl.childElementCount > 0) return;
     this.lastCacheSig = sig;
     // 已消失的条目（被清理/换音色）从选中集合里剔掉，避免清到不存在的目标
@@ -441,7 +449,7 @@ export class PlayerPanelView extends ItemView {
       });
       item.createSpan({
         cls: 'va-player-cache-voice',
-        text: this.voiceLabels.get(row.owner.voice) ?? row.owner.voice,
+        text: this.cacheLabel(row),
       });
       item.createSpan({
         cls: 'va-player-cache-count',
@@ -484,10 +492,11 @@ export class PlayerPanelView extends ItemView {
 
     const voices = await this.host.voicesForCurrentAccount();
     const currentVoice = this.host.currentVoice();
+    // 先清空：音色列表为空时也要丢掉上一份显示名，否则缓存行会用旧名字排序
+    this.voiceLabels.clear();
     if (voices.length) {
       this.voiceRowEl.show();
       this.voiceSelect.empty();
-      this.voiceLabels.clear();
       for (const v of voices) {
         // value 用音色 ID（发请求、落缓存都用它），text 用清单里的显示名
         this.voiceSelect.createEl('option', { value: v.id, text: v.label });
@@ -502,6 +511,10 @@ export class PlayerPanelView extends ItemView {
     } else {
       this.voiceRowEl.hide();
     }
+    // 显示名刚变化（首次异步加载完成 / 清单重载 / 换账号）：缓存行按名称排序，
+    // 必须作废指纹并在展开状态下重绘，否则会残留「按 ID 排」的旧顺序
+    this.lastCacheSig = '';
+    if (this.cacheSectionEl?.open) void this.renderNoteCache();
   }
 
   private transportBtn(

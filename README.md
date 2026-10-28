@@ -81,7 +81,7 @@ npm run dev        # watch 模式构建
 npm run build      # 生产构建（minify）
 npm run lint       # ESLint
 npm run typecheck  # TypeScript 严格类型检查
-npm test           # Vitest 单元测试（195 项）
+npm test           # Vitest 单元测试（199 项）
 ```
 
 ### 本地部署到 vault
