@@ -41,7 +41,12 @@
 2. 放入 vault 的 `.obsidian/plugins/voice-aloud/` 目录
 3. 重启 Obsidian，在「第三方插件」里启用 Voice Aloud
 
-用 Azure 的话，再把仓库里的 `azure-voices.json` 一并放进该目录（可选，不放则回退为显示账号下全部音色）。
+用 Azure 的话，再下载一份默认音色清单放进同一目录（可选）：
+
+- **下载**：[`azure-voices.json`](https://github.com/jemy204/obsidian-voice-aloud/blob/main/azure-voices.json) → 页面右上角 **Download raw file**；或直接点[直链下载](https://raw.githubusercontent.com/jemy204/obsidian-voice-aloud/main/azure-voices.json)（浏览器里是纯文本，右键「另存为」即可）
+- **放哪**：`.obsidian/plugins/voice-aloud/azure-voices.json`，与 `main.js` 同级，文件名不要改
+- **不放也行**：下拉会显示账号下全部音色（900+ 个），挑起来很费劲；放上这份精选清单（26 条中英日韩音色）更好用
+- 这个文件不会被升级覆盖，可以放心改（详见下方「升级时这个文件会怎样」）
 
 ### 通过 BRAT
 
@@ -67,7 +72,7 @@
 - 改完执行命令「重新加载 Azure 音色清单」即可生效，无需重启
 - 删掉该文件或把 `voices` 置空 → 回退为显示账号下全部音色
 
-仓库内的 `azure-voices.json` 是一份 26 条的中英日韩精选清单，可直接改。完整的四语种音色参考（含性别 / 地区 / 类型 / 状态）见 [`docs/azure-voices-4langs.md`](docs/azure-voices-4langs.md)。
+仓库内的 [`azure-voices.json`](https://github.com/jemy204/obsidian-voice-aloud/blob/main/azure-voices.json) 是一份 26 条的中英日韩精选清单，可直接[下载](https://raw.githubusercontent.com/jemy204/obsidian-voice-aloud/main/azure-voices.json)使用，也可下载后自己改。完整的四语种音色参考（含性别 / 地区 / 类型 / 状态）见 [`docs/azure-voices-4langs.md`](docs/azure-voices-4langs.md)。
 
 > 中英混读（英文句里的 `50 percent` 读成 fifty 而不是「五十」）依赖 SSML 的 `<lang>` 语言域，
 > 微软仅对**多语言音色**（名称含 `Multilingual`）与 **HD 音色**（`角色:基础模型` 冒号形式）支持该元素。
@@ -82,7 +87,7 @@
 - `deploy.mjs` 同样跳过已存在的 `azure-voices.json`（只在你没有这个文件时才复制一份默认清单）
 - 因此：**你改过的清单在升级后一定还在**；反过来，新版本仓库里的默认清单也**不会**自动替换掉你已有的文件
 
-想换成新版本仓库里的默认清单：从仓库或 Release 里重新复制一份 `azure-voices.json` 覆盖过去（覆盖前建议先备份你自己的）。删掉该文件则回退为「账号下全部音色」，不是回到默认清单。
+想换成新版本仓库里的默认清单：重新[下载一份](https://raw.githubusercontent.com/jemy204/obsidian-voice-aloud/main/azure-voices.json)覆盖过去（覆盖前建议先备份你自己的）。删掉该文件则回退为「账号下全部音色」，不是回到默认清单。
 
 ## 开发
 
