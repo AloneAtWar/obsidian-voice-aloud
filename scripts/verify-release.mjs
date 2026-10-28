@@ -19,7 +19,23 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-const REPO = process.env.VERIFY_REPO ?? 'jemy204/obsidian-voice-aloud';
+/**
+ * 仓库标识：优先 VERIFY_REPO 环境变量，否则从 origin 远端解析。
+ * 不写死 fork 路径——合并到上游后脚本仍然指向正确的仓库。
+ */
+function detectRepo() {
+  if (process.env.VERIFY_REPO) return process.env.VERIFY_REPO;
+  try {
+    const url = execFileSync('git', ['remote', 'get-url', 'origin'], { encoding: 'utf8' }).trim();
+    const m = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/.exec(url);
+    if (m) return `${m[1]}/${m[2]}`;
+  } catch {
+    /* 没有 git / 没有 origin */
+  }
+  return '';
+}
+
+const REPO = detectRepo();
 const OFFLINE = process.argv.includes('--offline');
 const REQUIRED_ASSETS = ['manifest.json', 'main.js', 'styles.css'];
 
@@ -112,7 +128,12 @@ function checkCatalog() {
 }
 
 function checkNoSecrets() {
-  const tracked = execFileSync('git', ['ls-files'], { encoding: 'utf8' }).split('\n');
+  let tracked;
+  try {
+    tracked = execFileSync('git', ['ls-files'], { encoding: 'utf8' }).split('\n');
+  } catch {
+    return record('warn', '仓库未跟踪 data.json', '不是 git 仓库或缺少 git，跳过');
+  }
   const leaked = tracked.filter((f) => /(^|\/)data\.json$/.test(f));
   if (leaked.length) {
     return record('error', '仓库未跟踪 data.json', `${leaked.join(', ')} 可能含 API Key`);
@@ -133,6 +154,9 @@ function checkWorkflow() {
 
 async function checkRemote(manifest) {
   if (OFFLINE) return record('info', '远端 release 核对', '已跳过（--offline）');
+  if (!REPO) {
+    return record('warn', '远端 release 核对', '无法确定仓库（设置 VERIFY_REPO 或配置 origin 远端）');
+  }
   const headers = { 'User-Agent': 'voice-aloud-verify' };
   if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   let releases;
@@ -145,7 +169,7 @@ async function checkRemote(manifest) {
   }
   if (!releases.length) return record('warn', '远端 release 存在', `${REPO} 还没有 release`);
 
-  // BRAT：按 semver 取最新（含 prerelease）
+  // BRAT：按 semver 取最新（含 prerelease）；草稿不参与
   const parse = (t) => t.replace(/^v/, '').split('-')[0].split('.').map(Number);
   const latest = releases
     .filter((r) => !r.draft)
@@ -154,6 +178,7 @@ async function checkRemote(manifest) {
       const [b1, b2, b3] = parse(b.tag_name);
       return b1 - a1 || b2 - a2 || b3 - a3;
     })[0];
+  if (!latest) return record('warn', '远端 release 存在', '只有草稿 release，BRAT 不会安装');
   const tag = latest.tag_name.replace(/^v/, '');
   const assets = latest.assets.map((a) => a.name);
   const missing = REQUIRED_ASSETS.filter((a) => !assets.includes(a));
