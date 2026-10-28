@@ -42,7 +42,10 @@ export class SynthService implements Synthesizer {
       model: account.model,
       voice: voice || account.voice,
       language: account.language,
+      region: account.region,
       extra: canonicalExtra(account.extra),
+      // 供应商请求体形态版本（Azure 的 SSML 语言域）：变更后旧缓存自动失效
+      synthesisRevision: getProvider(account.providerId)?.cacheRevision,
       text,
     });
   }

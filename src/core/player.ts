@@ -69,7 +69,7 @@ export class Player {
   private noteTitle = '';
 
   private stateListeners = new Set<(s: PlayerState) => void>();
-  private currentListeners = new Set<(id: string | null) => void>();
+  private currentListeners = new Set<(unit: ReadingUnit | null) => void>();
 
   constructor(private deps: PlayerDeps) {
     bindMediaSession({
@@ -89,7 +89,7 @@ export class Player {
     return () => this.stateListeners.delete(cb);
   }
 
-  onCurrent(cb: (id: string | null) => void): () => void {
+  onCurrent(cb: (unit: ReadingUnit | null) => void): () => void {
     this.currentListeners.add(cb);
     return () => this.currentListeners.delete(cb);
   }
@@ -130,9 +130,11 @@ export class Player {
     this.emit();
   }
 
-  playFromId(id: string): void {
-    const i = this.idIndex.get(id);
-    if (i === undefined) {
+  /** 点击朗读：按 (id, occurrence) 精确定位重复句中的某一个；缺 occurrence 时取第一个。 */
+  playFromId(id: string, occurrence = 0): void {
+    let i = this.units.findIndex((u) => u.id === id && u.occurrence === occurrence);
+    if (i === -1) i = this.idIndex.get(id) ?? -1;
+    if (i === -1) {
       new Notice(t('player.sentence-changed'));
       return;
     }
@@ -263,8 +265,8 @@ export class Player {
     for (const cb of this.stateListeners) cb(s);
   }
 
-  private fireCurrent(id: string | null): void {
-    for (const cb of this.currentListeners) cb(id);
+  private fireCurrent(unit: ReadingUnit | null): void {
+    for (const cb of this.currentListeners) cb(unit);
   }
 
   private ensureAudio(): HTMLAudioElement {
@@ -328,7 +330,7 @@ export class Player {
     this.playingFlag = true;
     this.pausedFlag = false;
     this.loadingFlag = true;
-    this.fireCurrent(u.id);
+    this.fireCurrent(u);
     this.emit();
 
     const { provider, account } = this.deps.getVoice();

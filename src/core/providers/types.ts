@@ -28,6 +28,8 @@ export interface TtsAccountConfig {
   name: string;
   providerId: string;
   baseUrl?: string;
+  /** Azure 语音服务区域（如 eastus）；也接受完整 URL，自动提取区域名。 */
+  region?: string;
   apiKey?: string;
   model?: string;
   voice: string;
@@ -66,6 +68,8 @@ export interface HealthResult {
 export interface TtsProvider {
   readonly id: string;
   readonly name: string;
+  /** 请求体形态版本（如 Azure 的 SSML 语言域）：参与音频缓存键，改动请求生成逻辑后递增 → 旧缓存自动失效。 */
+  readonly cacheRevision?: string;
   readonly capabilities: ProviderCapabilities;
   /** 新账号的默认字段（不含 id/name）。 */
   defaults(): Partial<TtsAccountConfig>;

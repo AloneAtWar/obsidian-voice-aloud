@@ -3,6 +3,7 @@ import { Notice } from 'obsidian';
 import type { AudioStorage, CacheOwner, CacheStats, NoteCacheInfo } from '../core/cache/storage';
 import { getProvider } from '../core/providers/registry';
 import { AccountModal } from './account-modal';
+import { formatBytes } from '../util/format';
 import { t } from '../i18n';
 
 export interface SettingsTabHost {
@@ -12,12 +13,6 @@ export interface SettingsTabHost {
   refreshPlayerViews(): void;
   /** 账号增删改后通知队列（账号不存在 → 任务过期）。 */
   onAccountsChanged(): void;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${bytes} B`;
 }
 
 function ownerLabel(owner: CacheOwner): string {

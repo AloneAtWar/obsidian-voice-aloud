@@ -96,6 +96,8 @@ function createHarness(opts: HarnessOpts = {}): Harness {
     getAccount: (id) => accounts.get(id),
     canPregenerate: () => true,
     readNote: async (path) => notes.get(path) ?? null,
+    isReadCodeActive: () => false,
+    isReadTablesActive: () => false,
     getConcurrencySettings: () => ({
       localTtsTotal: opts.localTtsTotal ?? 8,
       playbackBehavior: opts.playbackBehavior ?? 'yield',

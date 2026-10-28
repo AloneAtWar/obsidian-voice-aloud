@@ -1,6 +1,11 @@
 import { App, ButtonComponent, Modal, Notice, Setting } from 'obsidian';
 import { PROVIDER_LIST, getProvider } from '../core/providers/registry';
 import { LANGUAGES, type TtsAccountConfig } from '../core/providers/types';
+import {
+  AZURE_OUTPUT_FORMATS,
+  outputFormatFor,
+  type AzureOutputFormat,
+} from '../core/providers/azure';
 import { newAccount } from '../core/accounts';
 import { t } from '../i18n';
 
@@ -87,6 +92,37 @@ export class AccountModal extends Modal {
           this.account.apiKey = v.trim();
         });
       });
+    }
+
+    if (provider?.id === 'azure-tts') {
+      new Setting(body)
+        .setName(t('account.azure-region'))
+        .setDesc(t('account.azure-region-desc'))
+        .addText((txt) =>
+          txt
+            .setPlaceholder('eastus')
+            .setValue(this.account.region ?? '')
+            .onChange((v) => {
+              this.account.region = v.trim();
+            }),
+        );
+
+      // 输出格式：码率变 → extra 变 → 缓存键变 → 自动重新合成
+      new Setting(body)
+        .setName(t('account.azure-format'))
+        .setDesc(t('account.azure-format-desc'))
+        .addDropdown((d) => {
+          const labels: Record<AzureOutputFormat, string> = {
+            'audio-48khz-192kbitrate-mono-mp3': t('account.azure-format-192'),
+            'audio-48khz-96kbitrate-mono-mp3': t('account.azure-format-96'),
+            'audio-24khz-48kbitrate-mono-mp3': t('account.azure-format-48'),
+          };
+          for (const f of AZURE_OUTPUT_FORMATS) d.addOption(f, labels[f]);
+          d.setValue(outputFormatFor(this.account));
+          d.onChange((v) => {
+            this.account.extra = { ...(this.account.extra ?? {}), outputFormat: v };
+          });
+        });
     }
 
     if (provider?.id === 'openai-compatible') {

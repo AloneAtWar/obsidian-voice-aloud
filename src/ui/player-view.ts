@@ -1,5 +1,9 @@
-import { ItemView, setIcon, type WorkspaceLeaf } from 'obsidian';
+import { ItemView, Notice, setIcon, type WorkspaceLeaf } from 'obsidian';
 import type { Player, PlayerState } from '../core/player';
+import type { VoiceOption } from '../core/voice-catalog';
+import type { CacheOwner, NoteCacheInfo } from '../core/cache/storage';
+import { sortCacheRows } from './cache-rows';
+import { formatBytes } from '../util/format';
 import { t } from '../i18n';
 
 export const VIEW_TYPE_VOICE_ALOUD = 'voice-aloud-view';
@@ -11,13 +15,23 @@ export interface PlayerPanelHost {
   togglePointRead(): Promise<void>;
   isFollowReadActive(): boolean;
   toggleFollowRead(): Promise<void>;
+  /** 阅读代码：开启后朗读围栏代码块（一行一单元），关闭时跳过。 */
+  isReadCodeActive(): boolean;
+  toggleReadCode(): Promise<void>;
+  /** 阅读表格：开启后逐格朗读表格内容，关闭时跳过。 */
+  isReadTablesActive(): boolean;
+  toggleReadTables(): Promise<void>;
   /** 账号/音色选择（不做全局绑定，面板上每次可选，类似 obsidian-voice）。 */
   accountOptions(): { id: string; label: string }[];
   currentAccountId(): string | null;
   setCurrentAccount(id: string | null): Promise<void>;
   currentVoice(): string;
   setCurrentVoice(voice: string): Promise<void>;
-  voicesForCurrentAccount(): Promise<string[]>;
+  voicesForCurrentAccount(): Promise<VoiceOption[]>;
+  /** 当前文件的音频缓存（按 账号·音色 分组）。 */
+  noteCacheInfo(): Promise<NoteCacheInfo[]>;
+  /** 清理当前文件的缓存，返回删除条数；不传 owner 则清全部音色。 */
+  clearNoteCache(owner?: CacheOwner): Promise<number>;
   saveSettings(): Promise<void>;
   /** 把当前笔记加入预生成队列并启动（面板「预生成」按钮）。 */
   enqueueCurrentNote(): Promise<void>;
@@ -27,7 +41,7 @@ export interface PlayerPanelHost {
   notePregenProgress(): { status: 'waiting' | 'running'; done: number; total: number } | null;
 }
 
-const RATES = [0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+const RATES = [0.75, 0.8, 0.9, 1, 1.1, 1.2, 1.25, 1.5, 2, 2.5, 3];
 
 function formatTime(sec: number): string {
   if (!isFinite(sec) || sec < 0) return '0:00';
@@ -55,6 +69,8 @@ export class PlayerPanelView extends ItemView {
   private forwardBtn!: HTMLButtonElement;
   private pointReadBtn!: HTMLButtonElement;
   private followReadBtn!: HTMLButtonElement;
+  private readCodeBtn!: HTMLButtonElement;
+  private readTablesBtn!: HTMLButtonElement;
   private pregenBtn!: HTMLButtonElement;
   private pregenPctEl: HTMLElement | null = null;
   private speedDownBtn!: HTMLButtonElement;
@@ -64,6 +80,19 @@ export class PlayerPanelView extends ItemView {
   private accountSelect!: HTMLSelectElement;
   private voiceSelect!: HTMLSelectElement;
   private voiceRowEl!: HTMLElement;
+  /** 音色 ID → 显示名（来自 azure-voices.json）；副标题等处复用。 */
+  private voiceLabels = new Map<string, string>();
+  private cacheSectionEl!: HTMLDetailsElement;
+  private cacheMetaEl!: HTMLElement;
+  private cacheListEl!: HTMLElement;
+  private cacheClearBtn!: HTMLButtonElement;
+  private cacheSelectAllEl!: HTMLInputElement;
+  /** 勾选的缓存行（cacheRowKey）；只清理这些，其余保留。 */
+  private cacheSelection = new Set<string>();
+  private cacheRows: NoteCacheInfo[] = [];
+  private cacheAutoCloseTimer: number | null = null;
+  /** 上次渲染的内容指纹；null 表示失效，空字符串是空缓存的有效指纹。 */
+  private lastCacheSig: string | null = null;
 
   private isScrubbing = false;
   private unsubState: (() => void) | null = null;
@@ -106,6 +135,7 @@ export class PlayerPanelView extends ItemView {
   }
 
   override async onClose(): Promise<void> {
+    this.cancelCacheAutoClose();
     this.unsubState?.();
     this.unsubCurrent?.();
     this.unsubState = null;
@@ -205,7 +235,7 @@ export class PlayerPanelView extends ItemView {
       'va-player-track',
     );
 
-    // 次级控制：点读 | 跟读 | 预生成（入队并开始；已入队时按钮显示进度，点击查看队列）| 语速 -/+
+    // 次级控制：点读 | 跟读 | 阅读代码 | 阅读表格 | 预生成（入队并开始；已入队时按钮显示进度，点击查看队列）| 语速 -/+
     const secondary = root.createDiv('va-player-secondary');
 
     this.pointReadBtn = secondary.createEl('button', 'va-player-toggle');
@@ -221,6 +251,22 @@ export class PlayerPanelView extends ItemView {
     this.followReadBtn.ariaLabel = t('player.follow-read');
     this.followReadBtn.addEventListener('click', async () => {
       await this.host.toggleFollowRead();
+      this.onState();
+    });
+
+    this.readCodeBtn = secondary.createEl('button', 'va-player-toggle');
+    setIcon(this.readCodeBtn, 'code');
+    this.readCodeBtn.ariaLabel = t('player.read-code');
+    this.readCodeBtn.addEventListener('click', async () => {
+      await this.host.toggleReadCode();
+      this.onState();
+    });
+
+    this.readTablesBtn = secondary.createEl('button', 'va-player-toggle');
+    setIcon(this.readTablesBtn, 'table');
+    this.readTablesBtn.ariaLabel = t('player.read-tables');
+    this.readTablesBtn.addEventListener('click', async () => {
+      await this.host.toggleReadTables();
       this.onState();
     });
 
@@ -265,7 +311,173 @@ export class PlayerPanelView extends ItemView {
       this.onState();
     });
 
+    // 当前文件缓存：默认折叠。平时不显示体积增长（免得用户盯着"文件在变大"），
+    // 只在需要清理别的音色缓存时展开；折叠状态下连统计都不做。
+    this.cacheSectionEl = root.createEl('details', 'va-player-cache');
+    const cacheHead = this.cacheSectionEl.createEl('summary', 'va-player-cache-head');
+    cacheHead.createSpan({ cls: 'va-player-cache-title', text: t('player.cache-title') });
+    const cacheBody = this.cacheSectionEl.createDiv('va-player-cache-body');
+
+    const metaRow = cacheBody.createDiv('va-player-cache-metarow');
+    this.cacheMetaEl = metaRow.createDiv('va-player-cache-meta');
+    const selectAllLabel = metaRow.createEl('label', 'va-player-cache-all');
+    this.cacheSelectAllEl = selectAllLabel.createEl('input', { type: 'checkbox' });
+    this.cacheSelectAllEl.ariaLabel = t('player.cache-select-all');
+    selectAllLabel.createSpan({ text: t('player.cache-select-all') });
+    this.cacheSelectAllEl.addEventListener('change', () => {
+      this.cacheSelection.clear();
+      if (this.cacheSelectAllEl.checked) {
+        for (const row of this.cacheRows) this.cacheSelection.add(this.cacheRowKey(row));
+      }
+      for (const cb of Array.from(this.cacheListEl.querySelectorAll('input[type=checkbox]'))) {
+        (cb as HTMLInputElement).checked = this.cacheSelectAllEl.checked;
+      }
+      this.syncCacheButtons();
+    });
+    this.cacheListEl = cacheBody.createDiv('va-player-cache-list');
+    this.cacheClearBtn = cacheBody.createEl('button', {
+      cls: 'va-player-cache-clear',
+      text: t('player.cache-clear'),
+    });
+    this.cacheClearBtn.addEventListener('click', async () => {
+      const targets = this.cacheRows.filter((r) => this.cacheSelection.has(this.cacheRowKey(r)));
+      if (!targets.length) return;
+      let removed = 0;
+      for (const row of targets) removed += await this.host.clearNoteCache(row.owner);
+      this.cacheSelection.clear();
+      if (removed > 0) new Notice(t('player.cache-cleared', { n: removed }));
+      await this.renderNoteCache();
+    });
+    // 只在展开的那一刻统计一次；展开期间不再跟着播放刷新，15 秒后自动折叠
+    this.cacheSectionEl.addEventListener('toggle', () => {
+      if (this.cacheSectionEl.open) {
+        this.scheduleCacheAutoClose();
+        void this.renderNoteCache();
+      } else {
+        this.cancelCacheAutoClose();
+        this.cacheSelection.clear();
+        // 选择集清空了，DOM 里的勾选与「清理 N 项」还在：若再次展开时内容指纹未变，
+        // renderNoteCache 会提前返回，留下点不动的清理按钮（15 秒自动折叠也会触发）。
+        // 折叠时同步复位 DOM 并作废指纹，下次展开必定重绘。
+        this.resetCacheSelectionUi();
+        this.lastCacheSig = null;
+      }
+    });
+    // 用户在展开面板里操作（勾选、点清理）时续期，别挑到一半被折叠
+    const keepOpen = (): void => this.scheduleCacheAutoClose();
+    cacheBody.addEventListener('change', keepOpen);
+    cacheBody.addEventListener('click', keepOpen);
+
+    // 先拿音色显示名（缓存行要用显示名，但折叠状态不会统计）
     void this.renderOptions();
+  }
+
+  /** 展开后自动折回的时间：看个数字、勾几下足够。 */
+  private static readonly CACHE_AUTO_CLOSE_MS = 15_000;
+
+  private scheduleCacheAutoClose(): void {
+    if (this.cacheAutoCloseTimer !== null) window.clearTimeout(this.cacheAutoCloseTimer);
+    this.cacheAutoCloseTimer = window.setTimeout(() => {
+      this.cacheAutoCloseTimer = null;
+      this.cacheSectionEl.open = false;
+    }, PlayerPanelView.CACHE_AUTO_CLOSE_MS);
+  }
+
+  private cancelCacheAutoClose(): void {
+    if (this.cacheAutoCloseTimer !== null) {
+      window.clearTimeout(this.cacheAutoCloseTimer);
+      this.cacheAutoCloseTimer = null;
+    }
+  }
+
+  /** 一行的稳定标识：账号 + 音色（与缓存键的归属维度一致）。 */
+  private cacheRowKey(row: NoteCacheInfo): string {
+    return `${row.owner.accountId}\u0000${row.owner.voice}`;
+  }
+
+  /** 缓存行的音色显示名：来自音色清单，清单里没有（或还没加载完）时回退 ID。 */
+  private cacheLabel(row: NoteCacheInfo): string {
+    return this.voiceLabels.get(row.owner.voice) ?? row.owner.voice;
+  }
+
+  /** 渲染当前文件的缓存条目（按音色显示名升序，一行一个 账号·音色，可勾选）。 */
+  private async renderNoteCache(): Promise<void> {
+    if (!this.cacheSectionEl) return;
+    // 折叠状态不需要数字：直接跳过 IndexedDB 遍历，展开时 toggle 会重新算
+    if (!this.cacheSectionEl.open) return;
+    // 按显示名排序（不是体积）：体积随播放增长，按体积排会让每次展开的顺序都在变
+    const rows = sortCacheRows(
+      await this.host.noteCacheInfo().catch(() => [] as NoteCacheInfo[]),
+      (r) => this.cacheLabel(r),
+    );
+    if (!this.cacheSectionEl.isConnected) return;
+    this.cacheRows = rows;
+    // 指纹含显示名：清单改了名字也要重绘（名称与顺序都在变）
+    const sig = rows
+      .map((r) => `${this.cacheRowKey(r)}:${this.cacheLabel(r)}:${r.entries}:${r.bytes}`)
+      .join('|');
+    if (sig === this.lastCacheSig && this.cacheListEl.childElementCount > 0) return;
+    this.lastCacheSig = sig;
+    // 已消失的条目（被清理/换音色）从选中集合里剔掉，避免清到不存在的目标
+    const alive = new Set(rows.map((r) => this.cacheRowKey(r)));
+    for (const key of Array.from(this.cacheSelection)) {
+      if (!alive.has(key)) this.cacheSelection.delete(key);
+    }
+
+    this.cacheListEl.empty();
+    const entries = rows.reduce((s, r) => s + r.entries, 0);
+    const bytes = rows.reduce((s, r) => s + r.bytes, 0);
+    this.cacheMetaEl.setText(
+      entries
+        ? t('player.cache-meta', {
+            entries,
+            size: formatBytes(bytes),
+            voices: rows.length,
+          })
+        : t('player.cache-empty'),
+    );
+
+    for (const row of rows) {
+      const key = this.cacheRowKey(row);
+      const item = this.cacheListEl.createEl('label', 'va-player-cache-item');
+      const cb = item.createEl('input', { type: 'checkbox' });
+      cb.checked = this.cacheSelection.has(key);
+      cb.addEventListener('change', () => {
+        if (cb.checked) this.cacheSelection.add(key);
+        else this.cacheSelection.delete(key);
+        this.syncCacheButtons();
+      });
+      item.createSpan({
+        cls: 'va-player-cache-voice',
+        text: this.cacheLabel(row),
+      });
+      item.createSpan({
+        cls: 'va-player-cache-count',
+        text: t('player.cache-row', {
+          entries: row.entries,
+          size: formatBytes(row.bytes),
+        }),
+      });
+    }
+    this.syncCacheButtons();
+  }
+
+  /** 清理按钮文案与可用状态跟随勾选数量；全选框跟随是否全选。 */
+  private syncCacheButtons(): void {
+    const n = this.cacheSelection.size;
+    this.cacheSelectAllEl.checked = this.cacheRows.length > 0 && n === this.cacheRows.length;
+    this.cacheClearBtn.disabled = n === 0;
+    this.cacheClearBtn.setText(
+      n ? t('player.cache-clear-selected', { n }) : t('player.cache-clear'),
+    );
+  }
+
+  /** 折叠时复位缓存行的勾选与按钮状态（选择集已清空，DOM 必须同步，否则会出现假勾选）。 */
+  private resetCacheSelectionUi(): void {
+    for (const cb of Array.from(this.cacheListEl.querySelectorAll('input[type=checkbox]'))) {
+      (cb as HTMLInputElement).checked = false;
+    }
+    this.syncCacheButtons();
   }
 
   /** 重建账号/音色下拉（音色列表来自供应商，异步加载）。 */
@@ -280,19 +492,29 @@ export class PlayerPanelView extends ItemView {
 
     const voices = await this.host.voicesForCurrentAccount();
     const currentVoice = this.host.currentVoice();
+    // 先清空：音色列表为空时也要丢掉上一份显示名，否则缓存行会用旧名字排序
+    this.voiceLabels.clear();
     if (voices.length) {
       this.voiceRowEl.show();
       this.voiceSelect.empty();
       for (const v of voices) {
-        this.voiceSelect.createEl('option', { value: v, text: v });
+        // value 用音色 ID（发请求、落缓存都用它），text 用清单里的显示名
+        this.voiceSelect.createEl('option', { value: v.id, text: v.label });
+        this.voiceLabels.set(v.id, v.label);
       }
-      if (currentVoice && !voices.includes(currentVoice)) {
+      if (currentVoice && !this.voiceLabels.has(currentVoice)) {
+        // 当前音色不在清单里（用户改过配置文件）→ 仍保留，避免下拉显示空白
         this.voiceSelect.createEl('option', { value: currentVoice, text: currentVoice });
+        this.voiceLabels.set(currentVoice, currentVoice);
       }
       this.voiceSelect.value = currentVoice;
     } else {
       this.voiceRowEl.hide();
     }
+    // 显示名刚变化（首次异步加载完成 / 清单重载 / 换账号）：缓存行按名称排序，
+    // 必须作废指纹并在展开状态下重绘，否则会残留「按 ID 排」的旧顺序
+    this.lastCacheSig = null;
+    if (this.cacheSectionEl?.open) void this.renderNoteCache();
   }
 
   private transportBtn(
@@ -329,6 +551,10 @@ export class PlayerPanelView extends ItemView {
   }
 
   refresh(): void {
+    // 音色显示名可能刚重新加载，指纹作废以便缓存行按新名字重绘
+    this.lastCacheSig = null;
+    // 换笔记后旧数字没有意义：先收起，等用户下次点开再统计
+    if (this.cacheSectionEl?.open) this.cacheSectionEl.open = false;
     // 账号列表可能已变（设置页增删改），重建下拉选项
     void this.renderOptions();
     this.onState();
@@ -370,8 +596,11 @@ export class PlayerPanelView extends ItemView {
       const label =
         this.host.accountOptions().find((a) => a.id === id)?.label ?? t('player.system-voice');
       const voice = this.host.currentVoice();
+      const voiceLabel = voice ? (this.voiceLabels.get(voice) ?? voice) : '';
       this.headerSubtitleEl.setText(
-        voice ? t('player.subtitle', { total: s.total, voice: `${label} · ${voice}` }) : label,
+        voice
+          ? t('player.subtitle', { total: s.total, voice: `${label} · ${voiceLabel}` })
+          : label,
       );
     } else {
       this.headerSubtitleEl.setText('');
@@ -396,9 +625,11 @@ export class PlayerPanelView extends ItemView {
     this.statusEl.setText(statusText);
     this.statusEl.toggleClass('is-hidden', !statusText);
 
-    // 点读/跟读开关状态
+    // 点读/跟读/阅读代码/阅读表格开关状态
     this.pointReadBtn.toggleClass('is-active', this.host.isPointReadActive());
     this.followReadBtn.toggleClass('is-active', this.host.isFollowReadActive());
+    this.readCodeBtn.toggleClass('is-active', this.host.isReadCodeActive());
+    this.readTablesBtn.toggleClass('is-active', this.host.isReadTablesActive());
 
     // 语速显示
     this.speedValueEl.setText(`${this.host.settings.rate}x`);
