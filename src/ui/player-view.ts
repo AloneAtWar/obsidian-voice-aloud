@@ -355,6 +355,11 @@ export class PlayerPanelView extends ItemView {
       } else {
         this.cancelCacheAutoClose();
         this.cacheSelection.clear();
+        // 选择集清空了，DOM 里的勾选与「清理 N 项」还在：若再次展开时内容指纹未变，
+        // renderNoteCache 会提前返回，留下点不动的清理按钮（15 秒自动折叠也会触发）。
+        // 折叠时同步复位 DOM 并作废指纹，下次展开必定重绘。
+        this.resetCacheSelectionUi();
+        this.lastCacheSig = '';
       }
     });
     // 用户在展开面板里操作（勾选、点清理）时续期，别挑到一半被折叠
@@ -457,6 +462,14 @@ export class PlayerPanelView extends ItemView {
     this.cacheClearBtn.setText(
       n ? t('player.cache-clear-selected', { n }) : t('player.cache-clear'),
     );
+  }
+
+  /** 折叠时复位缓存行的勾选与按钮状态（选择集已清空，DOM 必须同步，否则会出现假勾选）。 */
+  private resetCacheSelectionUi(): void {
+    for (const cb of Array.from(this.cacheListEl.querySelectorAll('input[type=checkbox]'))) {
+      (cb as HTMLInputElement).checked = false;
+    }
+    this.syncCacheButtons();
   }
 
   /** 重建账号/音色下拉（音色列表来自供应商，异步加载）。 */

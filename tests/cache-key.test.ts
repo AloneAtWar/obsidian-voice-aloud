@@ -69,4 +69,32 @@ describe('audioCacheKey', () => {
     expect(withRev).not.toBe(await audioCacheKey(base));
     expect(withRev).not.toBe(other);
   });
+
+  it('区域：有值时键变，无值时不影响', async () => {
+    expect(await audioCacheKey({ ...base, region: 'eastus' })).not.toBe(
+      await audioCacheKey({ ...base, region: 'westus2' }),
+    );
+    expect(await audioCacheKey({ ...base, region: undefined })).toBe(await audioCacheKey(base));
+    expect(await audioCacheKey({ ...base, region: '' })).toBe(await audioCacheKey(base));
+  });
+
+  // 回归：1.0.3 的字段序列（无 region / 无版本）必须逐字节复现，
+  // 否则 OpenAI / Qwen / MiMo 的既有缓存与离线预生成内容会在升级后全部失效。
+  it('1.0.3 兼容：固定旧键不随新增字段漂移', async () => {
+    expect(await audioCacheKey(base)).toBe(
+      '53a0c813f6a358d615fda36550b04d8a7bb6fd887434b31485291273fc741779',
+    );
+    // 带 model 与 extra 的完整序列（锁定中间字段顺序：model 在 voice 之前，extra 在 text 之前）
+    expect(
+      await audioCacheKey({
+        accountId: 'acct-1',
+        providerId: 'openai-compatible',
+        model: 'tts-1',
+        voice: 'alloy',
+        language: 'English',
+        extra: canonicalExtra({ b: '2', a: '1' }),
+        text: 'Hello.',
+      }),
+    ).toBe('f17e49ee896565cbb189fc8d8213f18a85451d6548c8a981f4cb1f0942cb78df');
+  });
 });

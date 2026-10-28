@@ -264,6 +264,23 @@ const LI_SKIP_TAGS = new Set([
   'INPUT',
 ]);
 
+/**
+ * 元素的有效文本：句子切分与偏移计算共用同一套规则。
+ * skipCode 时递归剔除行内代码——**嵌套在 strong/em/a 里的 CODE 也要剔除**：
+ * 若只排除直接子 CODE，`Hello **`ABCDE`** world! Next sentence!` 的文本会多出
+ * ABCDE（长度 +5），而偏移按不含 CODE 的长度累加，两处错位会把后续普通句子切短。
+ * 点读定位（main.ts）也用它从 span 取文本，保证与单元文本同一口径。
+ */
+export function effectiveText(node: Node, skipCode: boolean): string {
+  if (node.nodeType === 3) return node.textContent || '';
+  if (node.nodeType !== 1) return '';
+  const el = node as HTMLElement;
+  if (skipCode && el.tagName === 'CODE') return '';
+  let out = '';
+  for (const child of Array.from(el.childNodes)) out += effectiveText(child, skipCode);
+  return out;
+}
+
 function wrapParagraph(
   p: HTMLElement,
   getIndex: () => UnitIndex | null,
@@ -280,10 +297,9 @@ function wrapParagraph(
     if (skipCode && n.nodeType === 1 && (n as HTMLElement).tagName === 'CODE') return false;
     return !isListItem || n.nodeType !== 1 || !LI_SKIP_TAGS.has((n as HTMLElement).tagName);
   };
-  const text = childNodes
-    .filter(joinSentence)
-    .map((n) => n.textContent || '')
-    .join('');
+  // 阅读代码关闭时行内代码整段剔除（含嵌套），与解析侧口径一致；见 effectiveText
+  const effText = (node: Node): string => effectiveText(node, skipCode);
+  const text = childNodes.filter(joinSentence).map(effText).join('');
   if (!text.trim()) return;
   // 软换行（连续源码行渲染成同一段落）也当切分点：解析侧按行切句，
   // 这里用 splitLinesExact 让段级 span 与行级单元一一对齐
@@ -312,18 +328,8 @@ function wrapParagraph(
     }
   };
 
-  // 元素的有效文本长度（阅读代码关闭时行内代码不计入，与解析侧剔除一致）
-  const effLen = (node: Node): number => {
-    if (node.nodeType === 3) return (node.textContent || '').length;
-    if (node.nodeType !== 1) return 0;
-    const el = node as HTMLElement;
-    if (skipCode && el.tagName === 'CODE') return 0;
-    let n = 0;
-    el.childNodes.forEach((c) => {
-      n += effLen(c);
-    });
-    return n;
-  };
+  // 元素的有效文本长度（与切分文本用同一个 effText：阅读代码关闭时行内代码不计入）
+  const effLen = (node: Node): number => effText(node).length;
   const walk = (node: Node): void => {
     if (skipCode && node.nodeType === 1 && (node as HTMLElement).tagName === 'CODE') {
       // 行内代码不朗读：保留在 DOM 里（视觉不变），但不计入句子文本/偏移
@@ -399,7 +405,8 @@ function wrapCodeBlock(pre: HTMLElement, getIndex: () => UnitIndex | null): void
   const index = getIndex();
   if (!index) return;
   const code = pre.querySelector('code') ?? pre;
-  // 逐行收集节点
+  // 逐行收集节点。换行本身也是节点：拆行时要把 \n 留在该行末尾，
+  // 否则重建后代码挤成一整行（显示与复制都错），空行与末尾换行同样会丢。
   const lines: Node[][] = [[]];
   const newline = () => lines.push([]);
   const collect = (parent: Node): void => {
@@ -414,6 +421,8 @@ function wrapCodeBlock(pre: HTMLElement, getIndex: () => UnitIndex | null): void
         for (let i = 0; i < parts.length; i++) {
           if (i > 0) newline();
           if (parts[i]) lines[lines.length - 1].push(document.createTextNode(parts[i]));
+          // 分隔用的换行补回本行末尾（最后一段之后没有换行）
+          if (i < parts.length - 1) lines[lines.length - 1].push(document.createTextNode('\n'));
         }
       } else if (node.nodeType === 1) {
         const el = node as HTMLElement;

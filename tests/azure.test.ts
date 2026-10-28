@@ -12,6 +12,7 @@ import {
   normalizeRegion,
   outputFormatFor,
   parseAzureVoices,
+  supportsLanguageTag,
 } from '../src/core/providers/azure';
 import { PROVIDERS, getProvider } from '../src/core/providers/registry';
 import { audioCacheKey, canonicalExtra } from '../src/core/cache/key';
@@ -222,10 +223,10 @@ describe('azure SSML 中英混排语言域', () => {
   const EN =
     'Given the current divorce rate of nearly 50 percent, that amounts to millions of cases in the United States every year.';
 
-  it('中文音色 + 中文标签 + 英文长句：英文整段进 en-US，数字随之读 fifty', () => {
-    expect(build(`例句：${EN}`, 'zh-CN-XiaoxiaoNeural')).toBe(
+  it('中文多语言音色 + 中文标签 + 英文长句：英文整段进 en-US，数字随之读 fifty', () => {
+    expect(build(`例句：${EN}`, 'zh-CN-XiaoxiaoMultilingualNeural')).toBe(
       '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-CN">' +
-        `<voice name="zh-CN-XiaoxiaoNeural">例句：<lang xml:lang="en-US">${EN}</lang></voice></speak>`,
+        `<voice name="zh-CN-XiaoxiaoMultilingualNeural">例句：<lang xml:lang="en-US">${EN}</lang></voice></speak>`,
     );
   });
 
@@ -235,23 +236,43 @@ describe('azure SSML 中英混排语言域', () => {
     expect(s).toContain(`<lang xml:lang="en-US">${EN}</lang>`);
   });
 
-  it('英文音色 + 中文片段：中文进 zh-CN', () => {
-    expect(build('Hello 世界', 'en-US-JennyNeural')).toBe(
+  it('英文多语言音色 + 中文片段：中文进 zh-CN', () => {
+    expect(build('Hello 世界', 'en-US-AvaMultilingualNeural')).toBe(
       '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">' +
-        '<voice name="en-US-JennyNeural">Hello <lang xml:lang="zh-CN">世界</lang></voice></speak>',
+        '<voice name="en-US-AvaMultilingualNeural">Hello <lang xml:lang="zh-CN">世界</lang></voice></speak>',
     );
   });
 
+  it('普通音色不生成 lang 标签（官方仅多语言音色支持该元素）', () => {
+    // 默认音色 zh-CN-XiaoxiaoNeural：整段保持纯文本，只做 XML 转义
+    expect(build(`例句：${EN}`, 'zh-CN-XiaoxiaoNeural')).toBe(
+      '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-CN">' +
+        `<voice name="zh-CN-XiaoxiaoNeural">例句：${EN}</voice></speak>`,
+    );
+    // 普通英文音色同理：不给中文片段套语言域
+    expect(build('Hello 世界', 'en-US-JennyNeural')).not.toContain('<lang');
+  });
+
+  it('supportsLanguageTag：多语言 / HD 支持，普通音色不支持', () => {
+    expect(supportsLanguageTag('zh-CN-XiaoxiaoMultilingualNeural')).toBe(true);
+    expect(supportsLanguageTag('en-US-AndrewMultilingualNeural')).toBe(true);
+    expect(supportsLanguageTag('zh-CN-Xiaoxiao:DragonHDLatestNeural')).toBe(true);
+    expect(supportsLanguageTag('zh-CN-XiaoxiaoNeural')).toBe(false);
+    expect(supportsLanguageTag('en-US-JennyNeural')).toBe(false);
+    expect(supportsLanguageTag('ja-JP-NanamiNeural')).toBe(false);
+    expect(supportsLanguageTag('')).toBe(false);
+  });
+
   it('纯中文不产生 lang 标签', () => {
-    expect(build('今天的句子很简单。', 'zh-CN-XiaoxiaoNeural')).not.toContain('<lang');
+    expect(build('今天的句子很简单。', 'zh-CN-XiaoxiaoMultilingualNeural')).not.toContain('<lang');
   });
 
   it('数字后接中文时仍按中文读（第 50 名 → 五十）', () => {
-    expect(build('第 50 名的考生请注意', 'zh-CN-XiaoxiaoNeural')).not.toContain('<lang');
+    expect(build('第 50 名的考生请注意', 'zh-CN-XiaoxiaoMultilingualNeural')).not.toContain('<lang');
   });
 
   it('语言域内的文本照常转义，标签本身不被转义', () => {
-    const s = build('标题 A & B 结束', 'zh-CN-XiaoxiaoNeural');
+    const s = build('标题 A & B 结束', 'zh-CN-XiaoxiaoMultilingualNeural');
     expect(s).toContain('<lang xml:lang="en-US">A &amp; B</lang>');
   });
 

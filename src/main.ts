@@ -2,6 +2,7 @@ import { Notice, Plugin, TFile, TFolder, WorkspaceLeaf, debounce } from 'obsidia
 import { DEFAULT_SETTINGS, resolveActive, type VoiceAloudSettings } from './core/accounts';
 import {
   NoteHighlighter,
+  effectiveText,
   neighborTexts,
   registerAnnotationPostProcessor,
   wrapAllReadingViews,
@@ -257,7 +258,9 @@ export default class VoiceAloudPlugin extends Plugin {
       name: t('command.reload-voice-catalog'),
       callback: async () => {
         await this.loadVoiceCatalog();
-        this.player.notifyExternal();
+        // 清单变化只影响下拉选项与显示名：必须走 refreshPlayerViews（内部 view.refresh() →
+        // renderOptions()）。notifyExternal 只重绘播放状态，已打开面板会继续显示旧选项。
+        this.refreshPlayerViews();
         new Notice(t('catalog.reloaded', { n: this.voiceCatalog?.length ?? 0 }));
       },
     });
@@ -363,14 +366,9 @@ export default class VoiceAloudPlugin extends Plugin {
         }
         const nt = neighborTexts(span);
         // 阅读代码关闭时行内代码（注音）不朗读，需从 span 文本里剔除后再做上下文匹配；
-        // 开启时注音属于朗读内容，必须保留——否则会匹配到同名但无注音的其它单元（如详细释义）
-        const keepCode = this.settings.readCodeBlocks;
-        const spanText = keepCode
-          ? (span.textContent ?? '')
-          : Array.from(span.childNodes)
-              .filter((n) => !(n.nodeType === 1 && (n as HTMLElement).tagName === 'CODE'))
-              .map((n) => n.textContent ?? '')
-              .join('');
+        // 开启时注音属于朗读内容，必须保留——否则会匹配到同名但无注音的其它单元（如详细释义）。
+        // 用 effectiveText 递归剔除：注音常嵌在 strong/em 里，只过滤直接子节点会多出文本。
+        const spanText = effectiveText(span, !this.settings.readCodeBlocks);
         const idx = locateUnit(
           units,
           {
@@ -550,6 +548,8 @@ export default class VoiceAloudPlugin extends Plugin {
           })
         : [];
     this.unitIndex = new UnitIndex(units);
+    // 句子集换了（换笔记 / 开关代码或表格）：点击处记录的单元下标已失效，清掉
+    this.clickedHighlight = null;
     this.player.setNote(units, { title: file?.basename ?? '', path: file?.path ?? null });
     if (resumeId) {
       const idx = units.findIndex((u) => u.id === resumeId && u.occurrence === resumeOcc);

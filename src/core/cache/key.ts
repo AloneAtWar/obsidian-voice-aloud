@@ -19,8 +19,13 @@ export interface AudioKeyFields {
 }
 
 /**
- * 音频缓存键 = hash(账号+供应商+模型+音色+语言+区域+额外参数+句子文本[+请求体版本])。
+ * 音频缓存键 = hash(账号+供应商+模型+音色+语言+额外参数+句子文本[+区域][+请求体版本])。
  * 换任一维度 → 键变 → 自动重新合成；语速不参与（播放端变速，不影响音频内容）。
+ *
+ * 字段序列的前 8 项与 1.0.3 逐字节一致，region / synthesisRevision 只在有值时
+ * **追加**为带前缀的独立字段：没有这两个维度的供应商（OpenAI / Qwen / MiMo）
+ * 升级后缓存键不变，旧音频与离线预生成内容继续命中；否则无条件插入空字段会多出
+ * 一个 NUL 分隔符，等于把所有人的既有缓存一次性作废。
  */
 export async function audioCacheKey(f: AudioKeyFields): Promise<string> {
   const parts = [
@@ -30,11 +35,11 @@ export async function audioCacheKey(f: AudioKeyFields): Promise<string> {
     f.model ?? '',
     f.voice,
     f.language,
-    f.region ?? '',
     f.extra ?? '',
     f.text,
   ];
-  // 条件追加：未声明版本的供应商键与旧版本完全一致，避免无关缓存被连带失效
+  // 带 key= 前缀，避免与相邻字段的取值产生拼接歧义
+  if (f.region) parts.push(`region=${f.region}`);
   if (f.synthesisRevision) parts.push(`rev=${f.synthesisRevision}`);
   return sha256Hex(parts.join('\u0000'));
 }

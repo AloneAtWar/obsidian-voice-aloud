@@ -40,7 +40,7 @@ export function outputFormatFor(account: TtsAccountConfig): AzureOutputFormat {
 }
 
 /** SSML 形态版本：参与音频缓存键。改变请求体生成逻辑时必须递增，否则旧缓存会被继续命中。 */
-const SSML_REVISION = 'lang-spans-v2-fmt192';
+const SSML_REVISION = 'lang-spans-v3-capability-gated';
 
 /** 音色列表拉取失败或未配置区域时的内置候选音色。 */
 export const AZURE_FALLBACK_VOICES = [
@@ -98,16 +98,36 @@ export function localeFromVoice(voice: string): string {
 }
 
 /**
+ * 音色是否支持 <lang xml:lang> 语言域。
+ *
+ * 微软文档限定该元素「仅多语言音色支持」：给普通音色（如默认的 zh-CN-XiaoxiaoNeural）
+ * 发语言标签属于未定义行为，音频可能被拒或读法异常，因此只在有能力的音色上生成。
+ * - 多语言音色：ShortName 含 Multilingual（zh-CN-XiaoxiaoMultilingualNeural、en-US-AvaMultilingualNeural…）
+ * - HD 音色：ShortName 为「角色:基础模型」冒号形式（zh-CN-Xiaoxiao:DragonHDLatestNeural），
+ *   实测接受 <lang> 并会按语言域切换数字读法（100000000：2.88s → 3.34s）
+ */
+export function supportsLanguageTag(voice: string): boolean {
+  const v = (voice ?? '').trim();
+  if (!v) return false;
+  if (/multilingual/i.test(v)) return true;
+  return v.includes(':');
+}
+
+/**
  * SSML 请求体：Azure 合成端点只接受 SSML，不接受 JSON。
  * 中英混排时按书写系统分段，外文片段套 <lang xml:lang> 语言域——否则数字会按音色
  * 的原生语言做文本规范化（中文音色把 "50" 读成「五十」）。单一语言文本不产生任何标签。
+ * 普通音色不支持该元素：整段保持纯文本，只做 XML 转义。
  */
 export function buildAzureSsml(input: SynthesizeInput): string {
   const locale = localeFromVoice(input.voice);
+  const body = supportsLanguageTag(input.voice)
+    ? wrapLanguageSpans(input.text, locale, escapeXml)
+    : escapeXml(input.text);
   return (
     '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis"' +
     ` xml:lang="${locale}"><voice name="${input.voice}">` +
-    wrapLanguageSpans(input.text, locale, escapeXml) +
+    body +
     '</voice></speak>'
   );
 }

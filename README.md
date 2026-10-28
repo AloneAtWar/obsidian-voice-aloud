@@ -17,7 +17,7 @@
 
 ### 缓存与预生成
 
-- **句子级哈希缓存**（IndexedDB）：缓存键包含账号 / 供应商 / 模型 / 音色 / 语言 / 区域 / 句子文本——改一句只重合成那一句
+- **句子级哈希缓存**（IndexedDB）：缓存键包含账号 / 供应商 / 模型 / 音色 / 语言 / 句子文本（Azure 另含区域与请求体版本）——改一句只重合成那一句；没有这些维度的供应商键值与旧版本一致，升级不会让既有缓存失效
 - **按音色清理**：设置页可按笔记查看与清理；播放面板底部展开「当前文件缓存」后可勾选特定音色清理，换音色时保留其余音色的音频
 - **预生成队列**：跨笔记后台批量合成——右键文件/文件夹或命令入队，独立队列页查看总进度与每篇进度，支持启停 / 暂停 / 取消 / 置顶 / 重试失败句。队列持久化，重启后自动继续；按账号设并发上限，本地 TTS 账号共享全局总并发；播放时队列「让路」（即时合成优先，命中缓存则零影响）
 
@@ -29,7 +29,7 @@
 | ------------- | ---------------------------------------------- | -------------------------- |
 | OpenAI 兼容     | `POST /v1/audio/speech`                        | 支持自托管服务                    |
 | Qwen3-TTS     | `/v1/audio/speech` + `/api/voices` + `/health` | 音色发现、健康检查、语言参数             |
-| Azure TTS     | SSML + `voices/list`                           | 服务区域配置、中英混排语言域、三档输出码率、音色清单 |
+| Azure TTS     | SSML + `voices/list`                           | 服务区域配置、中英混排语言域（多语言 / HD 音色）、三档输出码率、音色清单 |
 | Xiaomi MiMo   | chat-completions 形态                            | 支持风格指令                     |
 | 系统 Web Speech | —                                              | 内置离线保底，无需配置                |
 
@@ -40,6 +40,8 @@
 1. 从 [Releases](https://github.com/jemy204/obsidian-voice-aloud/releases) 下载 `main.js`、`manifest.json`、`styles.css`
 2. 放入 vault 的 `.obsidian/plugins/voice-aloud/` 目录
 3. 重启 Obsidian，在「第三方插件」里启用 Voice Aloud
+
+用 Azure 的话，再把仓库里的 `azure-voices.json` 一并放进该目录（可选，不放则回退为显示账号下全部音色）。
 
 ### 通过 BRAT
 
@@ -67,6 +69,10 @@
 
 仓库内的 `azure-voices.json` 是一份 26 条的中英日韩精选清单，可直接改。完整的四语种音色参考（含性别 / 地区 / 类型 / 状态）见 [`docs/azure-voices-4langs.md`](docs/azure-voices-4langs.md)。
 
+> 中英混读（英文句里的 `50 percent` 读成 fifty 而不是「五十」）依赖 SSML 的 `<lang>` 语言域，
+> 微软仅对**多语言音色**（名称含 `Multilingual`）与 **HD 音色**（`角色:基础模型` 冒号形式）支持该元素。
+> 普通音色（如 `zh-CN-XiaoxiaoNeural`）保持不带标签的纯文本请求——需要混读时请从清单里选多语言 / HD 音色。
+
 ## 开发
 
 ```bash
@@ -75,7 +81,7 @@ npm run dev        # watch 模式构建
 npm run build      # 生产构建（minify）
 npm run lint       # ESLint
 npm run typecheck  # TypeScript 严格类型检查
-npm test           # Vitest 单元测试（183 项）
+npm test           # Vitest 单元测试（195 项）
 ```
 
 ### 本地部署到 vault
@@ -88,7 +94,7 @@ node deploy.mjs <vault>/.obsidian/plugins/voice-aloud
 VOICE_ALOUD_PLUGIN_DIR=<vault>/.obsidian/plugins/voice-aloud node deploy.mjs
 ```
 
-想省掉每次输路径，在本地建 `deploy.local.mjs`（已在 `.gitignore` 中）写死自己的目录，之后 `node deploy.local.mjs` 即可。脚本会先构建，再复制 `main.js` / `manifest.json` / `styles.css` / `azure-voices.json`，不动你的 `data.json`。
+想省掉每次输路径，在本地建 `deploy.local.mjs`（已在 `.gitignore` 中）写死自己的目录，之后 `node deploy.local.mjs` 即可。脚本会先构建，再复制 `main.js` / `manifest.json` / `styles.css`；`data.json` 与已存在的 `azure-voices.json`（你的音色清单）不会被覆盖——想恢复默认清单，删掉该文件再部署一次。
 
 ### 架构
 
@@ -120,7 +126,7 @@ Voice Aloud is a text-to-speech plugin that reads your Obsidian notes aloud sent
 - **Player panel** — play/pause/stop, previous/next sentence, configurable seek-back, 11 speed steps (0.75x–3x), current-sentence display, one-click enqueue for pregeneration, and toggles for reading code blocks and tables.
 - **Sentence-level cache** (IndexedDB) — keys cover account, provider, model, voice, language and text, so an edited sentence alone is re-synthesized. The player panel exposes a collapsible per-note cache view with per-voice checkboxes, so switching voices only discards the old voice's audio.
 - **Pregeneration queue** — batch-synthesize notes in the background: enqueue via file/folder context menu or command, watch overall and per-note progress in a dedicated view, with start/pause/cancel/reorder/retry controls. The queue persists across restarts and resumes automatically; per-account concurrency caps plus a shared global cap for local-TTS accounts; playback always takes priority over queue work.
-- **Multiple providers** — OpenAI-compatible endpoints (including self-hosted), a dedicated Qwen3-TTS adapter, Azure TTS (SSML with mixed-language `<lang>` spans, selectable output bitrate, editable voice catalog), Xiaomi MiMo TTS, and the built-in system voice as an offline fallback.
+- **Multiple providers** — OpenAI-compatible endpoints (including self-hosted), a dedicated Qwen3-TTS adapter, Azure TTS (SSML with mixed-language `<lang>` spans for multilingual and HD voices, selectable output bitrate, editable voice catalog), Xiaomi MiMo TTS, and the built-in system voice as an offline fallback.
 
 Install: download `main.js`, `manifest.json` and `styles.css` from [Releases](https://github.com/jemy204/obsidian-voice-aloud/releases) into `.obsidian/plugins/voice-aloud/`, or add this repository to [BRAT](https://github.com/TfTHacker/obsidian42-brat).
 
