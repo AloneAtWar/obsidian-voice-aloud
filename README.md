@@ -93,6 +93,7 @@ npm run build      # 生产构建（minify）
 npm run lint       # ESLint
 npm run typecheck  # TypeScript 严格类型检查
 npm test           # Vitest 单元测试（199 项）
+npm run verify:release  # 发布就绪检查：manifest / versions / 构建产物 / release 资产（BRAT 与商店的硬性要求）
 ```
 
 ### 本地部署到 vault
