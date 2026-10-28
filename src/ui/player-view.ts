@@ -91,8 +91,8 @@ export class PlayerPanelView extends ItemView {
   private cacheSelection = new Set<string>();
   private cacheRows: NoteCacheInfo[] = [];
   private cacheAutoCloseTimer: number | null = null;
-  /** 上次渲染的内容指纹：没变化就不重建 DOM，避免每句都闪一下并打乱勾选。 */
-  private lastCacheSig = '';
+  /** 上次渲染的内容指纹；null 表示失效，空字符串是空缓存的有效指纹。 */
+  private lastCacheSig: string | null = null;
 
   private isScrubbing = false;
   private unsubState: (() => void) | null = null;
@@ -360,7 +360,7 @@ export class PlayerPanelView extends ItemView {
         // renderNoteCache 会提前返回，留下点不动的清理按钮（15 秒自动折叠也会触发）。
         // 折叠时同步复位 DOM 并作废指纹，下次展开必定重绘。
         this.resetCacheSelectionUi();
-        this.lastCacheSig = '';
+        this.lastCacheSig = null;
       }
     });
     // 用户在展开面板里操作（勾选、点清理）时续期，别挑到一半被折叠
@@ -513,7 +513,7 @@ export class PlayerPanelView extends ItemView {
     }
     // 显示名刚变化（首次异步加载完成 / 清单重载 / 换账号）：缓存行按名称排序，
     // 必须作废指纹并在展开状态下重绘，否则会残留「按 ID 排」的旧顺序
-    this.lastCacheSig = '';
+    this.lastCacheSig = null;
     if (this.cacheSectionEl?.open) void this.renderNoteCache();
   }
 
@@ -552,7 +552,7 @@ export class PlayerPanelView extends ItemView {
 
   refresh(): void {
     // 音色显示名可能刚重新加载，指纹作废以便缓存行按新名字重绘
-    this.lastCacheSig = '';
+    this.lastCacheSig = null;
     // 换笔记后旧数字没有意义：先收起，等用户下次点开再统计
     if (this.cacheSectionEl?.open) this.cacheSectionEl.open = false;
     // 账号列表可能已变（设置页增删改），重建下拉选项
