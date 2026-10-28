@@ -42,15 +42,16 @@ export function outputFormatFor(account: TtsAccountConfig): AzureOutputFormat {
 /** SSML 形态版本：参与音频缓存键。改变请求体生成逻辑时必须递增，否则旧缓存会被继续命中。 */
 const SSML_REVISION = 'lang-spans-v3-capability-gated';
 
-/** 音色列表拉取失败或未配置区域时的内置候选音色。 */
+/** 音色列表拉取失败或未配置区域时的内置候选音色（第一项即新账号默认音色）。 */
 export const AZURE_FALLBACK_VOICES = [
+  // 多语言音色：中英混读（<lang> 语言域）需要它，作为默认
+  'zh-CN-XiaoxiaoMultilingualNeural',
   'zh-CN-XiaoxiaoNeural',
   'zh-CN-XiaoyiNeural',
   'zh-CN-YunjianNeural',
   'zh-CN-YunxiNeural',
   // HD 音色名是「角色名:基础模型」的冒号形式，不是连字符拼接
   'zh-CN-Xiaoxiao:DragonHDLatestNeural',
-  'zh-CN-XiaoxiaoMultilingualNeural',
   'en-US-AvaMultilingualNeural',
   'en-US-JennyNeural',
   'en-US-AndrewMultilingualNeural',
@@ -100,7 +101,7 @@ export function localeFromVoice(voice: string): string {
 /**
  * 音色是否支持 <lang xml:lang> 语言域。
  *
- * 微软文档限定该元素「仅多语言音色支持」：给普通音色（如默认的 zh-CN-XiaoxiaoNeural）
+ * 微软文档限定该元素「仅多语言音色支持」：给普通音色（如 zh-CN-XiaoxiaoNeural）
  * 发语言标签属于未定义行为，音频可能被拒或读法异常，因此只在有能力的音色上生成。
  * - 多语言音色：ShortName 含 Multilingual（zh-CN-XiaoxiaoMultilingualNeural、en-US-AvaMultilingualNeural…）
  * - HD 音色：ShortName 为「角色:基础模型」冒号形式（zh-CN-Xiaoxiao:DragonHDLatestNeural），
@@ -153,7 +154,8 @@ export const azureProvider: TtsProvider = {
   capabilities: { cacheable: true, pregeneratable: true, voiceList: true, direct: false },
   defaults: () => ({
     region: AZURE_DEFAULT_REGION,
-    voice: 'zh-CN-XiaoxiaoNeural',
+    // 多语言音色：普通音色不支持 <lang> 语言域，中英混读会退回中文数字规范化
+    voice: 'zh-CN-XiaoxiaoMultilingualNeural',
     language: 'Chinese',
   }),
   async listVoices(account, http = obsidianHttp): Promise<string[]> {

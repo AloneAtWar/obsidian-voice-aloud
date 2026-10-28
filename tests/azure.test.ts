@@ -107,17 +107,20 @@ describe('azure provider 形状与注册', () => {
     expect(PROVIDERS['azure-tts']).toBe(azureProvider);
   });
 
-  it('defaults 默认 eastus 与中文音色', () => {
+  it('defaults 默认 eastus 与多语言中文音色（支持中英混读）', () => {
     expect(azureProvider.defaults()).toEqual({
       region: 'eastus',
-      voice: 'zh-CN-XiaoxiaoNeural',
+      voice: 'zh-CN-XiaoxiaoMultilingualNeural',
       language: 'Chinese',
     });
+    // 默认音色必须自带语言域能力，否则 50 percent 会读成「五十」
+    expect(supportsLanguageTag(azureProvider.defaults().voice as string)).toBe(true);
   });
 
-  it('fallback 音色列表非空', () => {
+  it('fallback 音色列表非空，且第一项就是默认音色', () => {
     expect(AZURE_FALLBACK_VOICES.length).toBeGreaterThan(0);
     expect(AZURE_FALLBACK_VOICES.every((v) => typeof v === 'string' && v.length > 0)).toBe(true);
+    expect(AZURE_FALLBACK_VOICES[0]).toBe(azureProvider.defaults().voice);
   });
 });
 
@@ -244,7 +247,7 @@ describe('azure SSML 中英混排语言域', () => {
   });
 
   it('普通音色不生成 lang 标签（官方仅多语言音色支持该元素）', () => {
-    // 默认音色 zh-CN-XiaoxiaoNeural：整段保持纯文本，只做 XML 转义
+    // 普通音色 zh-CN-XiaoxiaoNeural：整段保持纯文本，只做 XML 转义
     expect(build(`例句：${EN}`, 'zh-CN-XiaoxiaoNeural')).toBe(
       '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="zh-CN">' +
         `<voice name="zh-CN-XiaoxiaoNeural">例句：${EN}</voice></speak>`,

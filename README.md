@@ -72,6 +72,17 @@
 > 中英混读（英文句里的 `50 percent` 读成 fifty 而不是「五十」）依赖 SSML 的 `<lang>` 语言域，
 > 微软仅对**多语言音色**（名称含 `Multilingual`）与 **HD 音色**（`角色:基础模型` 冒号形式）支持该元素。
 > 普通音色（如 `zh-CN-XiaoxiaoNeural`）保持不带标签的纯文本请求——需要混读时请从清单里选多语言 / HD 音色。
+> 新建账号的默认音色因此是 `zh-CN-XiaoxiaoMultilingualNeural`（旧账号不受影响，仍用你自己选的音色）。
+
+### 升级时这个文件会怎样
+
+`azure-voices.json` 是**你的配置文件**，不是插件运行必需的文件：
+
+- Obsidian 与 BRAT 升级插件时只写入 release 里的 `main.js`、`manifest.json`、`styles.css`，**不会覆盖也不会删除**插件目录里的其它文件——`azure-voices.json`、`data.json` 都原样保留
+- `deploy.mjs` 同样跳过已存在的 `azure-voices.json`（只在你没有这个文件时才复制一份默认清单）
+- 因此：**你改过的清单在升级后一定还在**；反过来，新版本仓库里的默认清单也**不会**自动替换掉你已有的文件
+
+想换成新版本仓库里的默认清单：从仓库或 Release 里重新复制一份 `azure-voices.json` 覆盖过去（覆盖前建议先备份你自己的）。删掉该文件则回退为「账号下全部音色」，不是回到默认清单。
 
 ## 开发
 
