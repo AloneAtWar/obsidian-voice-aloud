@@ -42,6 +42,9 @@ export interface PlayerPanelHost {
 }
 
 const RATES = [0.75, 0.8, 0.9, 1, 1.1, 1.2, 1.25, 1.5, 2, 2.5, 3];
+// 适合单排容纳播放器控件的布局宽度，单位为应用缩放前的 CSS 像素。
+const PLAYER_LAYOUT_WIDTH = 420;
+const MIN_PLAYER_HEIGHT_SCALE = 0.65;
 
 function formatTime(sec: number): string {
   if (!isFinite(sec) || sec < 0) return '0:00';
@@ -120,7 +123,7 @@ export class PlayerPanelView extends ItemView {
 
   override async onOpen(): Promise<void> {
     this.contentEl.empty();
-    this.contentEl.addClass('va-view');
+    this.contentEl.addClass('va-view', 'va-player-view');
     this.buildDom();
     this.unsubState = this.player.onState(() => this.onState());
     this.unsubCurrent = this.player.onCurrent(() => this.onState());
@@ -368,8 +371,37 @@ export class PlayerPanelView extends ItemView {
     cacheBody.addEventListener('change', keepOpen);
     cacheBody.addEventListener('click', keepOpen);
 
+    this.observePanelSize(root, cacheBody);
     // 先拿音色显示名（缓存行要用显示名，但折叠状态不会统计）
     void this.renderOptions();
+  }
+
+  private observePanelSize(root: HTMLElement, cacheBody: HTMLElement): void {
+    const viewport = this.contentEl;
+    const windowRoot = viewport.ownerDocument.documentElement;
+    const fit = (): void => {
+      // 窗口缩窄时，Obsidian 可能保留侧栏的旧宽度，让它超出窗口右缘。
+      const left = Math.max(0, viewport.getBoundingClientRect().left);
+      const visibleWidth = Math.max(0, Math.floor(windowRoot.clientWidth - left));
+      viewport.style.maxWidth = `${visibleWidth}px`;
+      const { clientWidth, clientHeight } = viewport;
+      if (!clientWidth || !clientHeight) return;
+
+      const layoutWidth = Math.max(PLAYER_LAYOUT_WIDTH, clientWidth);
+      root.style.width = `${layoutWidth}px`;
+      // offsetHeight 用未缩放的尺寸。展开的缓存列表由面板滚动承载。
+      const cacheHeight = this.cacheSectionEl.open ? cacheBody.offsetHeight : 0;
+      const playerHeight = root.offsetHeight - cacheHeight;
+      const heightScale = Math.max(MIN_PLAYER_HEIGHT_SCALE, clientHeight / playerHeight);
+      const scale = Math.min(1, clientWidth / layoutWidth, heightScale);
+      root.style.setProperty('--va-player-scale', String(scale));
+    };
+    const observer = new ResizeObserver(fit);
+    observer.observe(windowRoot);
+    observer.observe(viewport);
+    observer.observe(root);
+    this.registerEvent(this.app.workspace.on('resize', fit));
+    this.register(() => observer.disconnect());
   }
 
   /** 展开后自动折回的时间：看个数字、勾几下足够。 */

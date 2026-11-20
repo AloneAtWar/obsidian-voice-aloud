@@ -25,13 +25,24 @@
 
 .va-view {
   padding: 0;
+  font-size: var(--font-ui-medium, 15px);
+}
+
+.workspace-leaf-content .view-content.va-player-view {
+  min-width: 0;
+  padding: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .va-player {
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
+  margin-inline: auto;
   gap: 14px;
   padding: 16px 14px;
+  zoom: var(--va-player-scale, 1);
 }
 
 .va-player-header {
@@ -129,6 +140,7 @@
 
 .va-player-btn {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   cursor: pointer;
@@ -219,7 +231,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 24px;
+  gap: 18px;
 }
 
 .va-player-toggle,
@@ -287,6 +299,7 @@
 /* 语速组 */
 .va-player-speed {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 4px;
 }
@@ -413,7 +426,8 @@
 }
 
 .va-cache-filter-select {
-  max-width: 260px;
+  min-width: 0;
+  max-width: min(260px, 100%);
   font-size: var(--font-smaller);
 }
 
