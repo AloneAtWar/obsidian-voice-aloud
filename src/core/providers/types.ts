@@ -70,6 +70,8 @@ export interface TtsProvider {
   readonly name: string;
   /** 请求体形态版本（如 Azure 的 SSML 语言域）：参与音频缓存键，改动请求生成逻辑后递增 → 旧缓存自动失效。 */
   readonly cacheRevision?: string;
+  /** 播放面板音色显示名（voice id → 文案）。缺省时按音色 ID 格式化。 */
+  readonly voiceLabels?: Readonly<Record<string, string>>;
   readonly capabilities: ProviderCapabilities;
   /** 新账号的默认字段（不含 id/name）。 */
   defaults(): Partial<TtsAccountConfig>;

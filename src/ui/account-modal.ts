@@ -84,6 +84,19 @@ export class AccountModal extends Modal {
             }),
         );
     }
+    if (provider?.id === 'deepseek-tts') {
+      new Setting(body)
+        .setName(t('account.base-url'))
+        .setDesc('https://api.deepseek.com')
+        .addText((txt) =>
+          txt
+            .setPlaceholder('https://api.deepseek.com')
+            .setValue(this.account.baseUrl ?? '')
+            .onChange((v) => {
+              this.account.baseUrl = v.trim();
+            }),
+        );
+    }
 
     if (provider?.id !== 'qwen3-tts') {
       new Setting(body).setName(t('account.api-key')).addText((txt) => {
@@ -149,20 +162,23 @@ export class AccountModal extends Modal {
         );
     }
 
-    new Setting(body).setName(t('account.language')).addDropdown((d) => {
-      const labels: Record<string, string> = {
-        Chinese: t('common.language.chinese'),
-        English: t('common.language.english'),
-        Japanese: t('common.language.japanese'),
-        Korean: t('common.language.korean'),
-        Auto: t('common.language.auto'),
-      };
-      for (const l of LANGUAGES) d.addOption(l, labels[l] ?? l);
-      d.setValue(this.account.language);
-      d.onChange((v) => {
-        this.account.language = v;
+    // DeepSeek 按文本识别语种，没有语种参数。语言只进缓存键，露出来会让同一句再合成一次。
+    if (provider?.id !== 'deepseek-tts') {
+      new Setting(body).setName(t('account.language')).addDropdown((d) => {
+        const labels: Record<string, string> = {
+          Chinese: t('common.language.chinese'),
+          English: t('common.language.english'),
+          Japanese: t('common.language.japanese'),
+          Korean: t('common.language.korean'),
+          Auto: t('common.language.auto'),
+        };
+        for (const l of LANGUAGES) d.addOption(l, labels[l] ?? l);
+        d.setValue(this.account.language);
+        d.onChange((v) => {
+          this.account.language = v;
+        });
       });
-    });
+    }
 
     // 预生成队列：并发与本地 TTS 标记
     new Setting(body)

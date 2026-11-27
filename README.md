@@ -25,13 +25,14 @@
 
 供应商（系统适配器）与账号（你的实例配置）分离，可同时配置多个账号随时切换：
 
-| 供应商           | 接口                                             | 说明                         |
-| ------------- | ---------------------------------------------- | -------------------------- |
-| OpenAI 兼容     | `POST /v1/audio/speech`                        | 支持自托管服务                    |
-| Qwen3-TTS     | `/v1/audio/speech` + `/api/voices` + `/health` | 音色发现、健康检查、语言参数             |
-| Azure TTS     | SSML + `voices/list`                           | 服务区域配置、中英混排语言域（多语言 / HD 音色）、三档输出码率、音色清单 |
-| Xiaomi MiMo   | chat-completions 形态                            | 支持风格指令                     |
-| 系统 Web Speech | —                                              | 内置离线保底，无需配置                |
+| 供应商          | 接口                                           | 说明                                                                     |
+| --------------- | ---------------------------------------------- | ------------------------------------------------------------------------ |
+| OpenAI 兼容     | `POST /v1/audio/speech`                        | 支持自托管服务                                                           |
+| Qwen3-TTS       | `/v1/audio/speech` + `/api/voices` + `/health` | 音色发现、健康检查、语言参数                                             |
+| Azure TTS       | SSML + `voices/list`                           | 服务区域配置、中英混排语言域（多语言 / HD 音色）、三档输出码率、音色清单 |
+| Xiaomi MiMo     | chat-completions 形态                          | 支持风格指令                                                             |
+| DeepSeek TTS    | `POST /v1/tools/tts`                           | 海星 / 暗潮，返回 WAV；语种按文本识别                                    |
+| 系统 Web Speech | —                                              | 内置离线保底，无需配置                                                   |
 
 ## 安装
 
@@ -97,7 +98,7 @@ npm run dev        # watch 模式构建
 npm run build      # 生产构建（minify）
 npm run lint       # ESLint
 npm run typecheck  # TypeScript 严格类型检查
-npm test           # Vitest 单元测试（199 项）
+npm test           # Vitest 单元测试（209 项）
 npm run verify:release  # 发布就绪检查：manifest / versions / 构建产物 / release 资产（BRAT 与商店的硬性要求）
 ```
 
@@ -143,7 +144,7 @@ Voice Aloud is a text-to-speech plugin that reads your Obsidian notes aloud sent
 - **Player panel** — play/pause/stop, previous/next sentence, configurable seek-back, 11 speed steps (0.75x–3x), current-sentence display, one-click enqueue for pregeneration, and toggles for reading code blocks and tables.
 - **Sentence-level cache** (IndexedDB) — keys cover account, provider, model, voice, language and text, so an edited sentence alone is re-synthesized. The player panel exposes a collapsible per-note cache view with per-voice checkboxes, so switching voices only discards the old voice's audio.
 - **Pregeneration queue** — batch-synthesize notes in the background: enqueue via file/folder context menu or command, watch overall and per-note progress in a dedicated view, with start/pause/cancel/reorder/retry controls. The queue persists across restarts and resumes automatically; per-account concurrency caps plus a shared global cap for local-TTS accounts; playback always takes priority over queue work.
-- **Multiple providers** — OpenAI-compatible endpoints (including self-hosted), a dedicated Qwen3-TTS adapter, Azure TTS (SSML with mixed-language `<lang>` spans for multilingual and HD voices, selectable output bitrate, editable voice catalog), Xiaomi MiMo TTS, and the built-in system voice as an offline fallback.
+- **Multiple providers** — OpenAI-compatible endpoints (including self-hosted), a dedicated Qwen3-TTS adapter, Azure TTS (SSML with mixed-language `<lang>` spans for multilingual and HD voices, selectable output bitrate, editable voice catalog), Xiaomi MiMo TTS, DeepSeek TTS (stella / tide, WAV), and the built-in system voice as an offline fallback.
 
 Install: download `main.js`, `manifest.json` and `styles.css` from [Releases](../../releases) into `.obsidian/plugins/voice-aloud/`, or add this repository to [BRAT](https://github.com/TfTHacker/obsidian42-brat).
 
