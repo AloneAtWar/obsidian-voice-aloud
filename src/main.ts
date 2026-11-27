@@ -162,9 +162,12 @@ export default class VoiceAloudPlugin extends Plugin {
           return this.voiceCatalog.map((v): VoiceOption => ({ id: v.id, label: v.label }));
         }
         try {
-          // 其他供应商（或清单文件缺失）：按 ID 生成显示名（同样带 `语言~` 前缀）
+          // 其他供应商（或清单文件缺失）：供应商自带显示名优先，否则按 ID 格式化（带 `语言~` 前缀）
           const ids = await provider.listVoices(account);
-          return ids.map((id): VoiceOption => ({ id, label: displayLabel(id) }));
+          return ids.map((id): VoiceOption => ({
+            id,
+            label: provider.voiceLabels?.[id] ?? displayLabel(id),
+          }));
         } catch {
           return [];
         }

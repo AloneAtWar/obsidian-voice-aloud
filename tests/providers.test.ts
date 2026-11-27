@@ -169,7 +169,7 @@ describe('webspeech', () => {
 
 describe('registry & accounts', () => {
   it('所有 provider 都已注册', () => {
-    for (const id of ['qwen3-tts', 'openai-compatible', 'mimo', 'webspeech']) {
+    for (const id of ['qwen3-tts', 'openai-compatible', 'mimo', 'deepseek-tts', 'webspeech']) {
       expect(getProvider(id)?.id).toBe(id);
     }
     expect(PROVIDERS['nope']).toBeUndefined();

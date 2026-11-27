@@ -2,6 +2,7 @@ import { mimoProvider } from './mimo';
 import { openaiCompatibleProvider } from './openai-compatible';
 import { qwen3Provider } from './qwen3';
 import { azureProvider } from './azure';
+import { deepseekProvider } from './deepseek';
 import { webspeechProvider } from './webspeech';
 import type { TtsProvider } from './types';
 
@@ -11,6 +12,7 @@ export const PROVIDER_LIST: TtsProvider[] = [
   qwen3Provider,
   azureProvider,
   mimoProvider,
+  deepseekProvider,
   webspeechProvider,
 ];
 
